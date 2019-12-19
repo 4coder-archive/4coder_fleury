@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include "4coder_default_include.cpp"
 
 static void Fleury4LightMode(Application_Links *app);
@@ -11,7 +12,6 @@ static void Fleury4CloseCodePeek(void);
 static void Fleury4NextCodePeek(void);
 static void Fleury4CodePeekGo(Application_Links *app);
 BUFFER_HOOK_SIG(Fleury4BeginBuffer);
-
 static b32 global_dark_mode = 1;
 static Vec2_f32 global_smooth_cursor_position = {0};
 static b32 global_code_peek_open = 0;
@@ -20,6 +20,50 @@ String_Match global_code_peek_matches[16] = {0};
 static int global_code_peek_selected_index = -1;
 static f32 global_code_peek_open_transition = 0.f;
 static Range_i64 global_code_peek_token_range;
+
+static b32 global_power_mode_enabled = 0;
+static struct
+{
+    int particle_count;
+    struct
+    {
+        f32 x;
+        f32 y;
+        f32 velocity_x;
+        f32 velocity_y;
+        ARGB_Color color;
+        f32 alpha;
+        f32 roundness;
+        f32 scale;
+    }
+    particles[4096];
+    f32 screen_shake;
+}
+global_power_mode;
+
+static f32
+RandomF32(f32 low, f32 high)
+{
+    return low + (high - low) * (((int)rand() % 10000) / 10000.f);
+}
+
+static void
+Fleury4Particle(f32 x, f32 y, f32 velocity_x, f32 velocity_y, ARGB_Color color,
+                f32 roundness, f32 scale)
+{
+    if(global_power_mode.particle_count < ArrayCount(global_power_mode.particles))
+    {
+        int i = global_power_mode.particle_count++;
+        global_power_mode.particles[i].x = x;
+        global_power_mode.particles[i].y = y;
+        global_power_mode.particles[i].velocity_x = velocity_x;
+        global_power_mode.particles[i].velocity_y = velocity_y;
+        global_power_mode.particles[i].color = color;
+        global_power_mode.particles[i].alpha = 1.f;
+        global_power_mode.particles[i].roundness = roundness;
+        global_power_mode.particles[i].scale = scale;
+    }
+}
 
 static f32
 MinimumF32(f32 a, f32 b)
@@ -31,6 +75,23 @@ static f32
 MaximumF32(f32 a, f32 b)
 {
     return a > b ? a : b;
+}
+
+static Vec2_f32
+Fleury4GetCameraFromView(Application_Links *app, View_ID view)
+{
+    Buffer_ID buffer = view_get_buffer(app, view, Access_ReadWriteVisible);
+    Buffer_Scroll scroll = view_get_buffer_scroll(app, view);
+    Face_ID face = get_face_id(app, buffer);
+    Face_Metrics metrics = get_face_metrics(app, face);
+    
+    Vec2_f32 v =
+    {
+        scroll.position.pixel_shift.x,
+        scroll.position.pixel_shift.y + scroll.position.line_number*metrics.line_height,
+    };
+    
+    return v;
 }
 
 static String_Const_u8_Array
@@ -56,6 +117,77 @@ Fleury4MakeTypeSearchList(Application_Links *app, Arena *arena, String_Const_u8 
     return(result);
 }
 
+static void
+Fleury4SpawnPowerModeParticles(Application_Links *app, View_ID view)
+{
+    if(global_power_mode_enabled)
+    {
+        Vec2_f32 camera = Fleury4GetCameraFromView(app, view);
+        
+        for(int i = 0; i < 60; ++i)
+        {
+            f32 movement_angle = RandomF32(-3.1415926535897f*3.f/2.f, 3.1415926535897f*1.f/3.f);
+            f32 velocity_magnitude = RandomF32(20.f, 180.f);
+            f32 velocity_x = cosf(movement_angle)*velocity_magnitude;
+            f32 velocity_y = sinf(movement_angle)*velocity_magnitude;
+            Fleury4Particle(global_smooth_cursor_position.x + 4 + camera.x,
+                            global_smooth_cursor_position.y + 8 + camera.y,
+                            velocity_x, velocity_y,
+                            0xffffffff,
+                            RandomF32(1.5f, 8.f),
+                            RandomF32(0.5f, 6.f));
+        }
+        
+        global_power_mode.screen_shake += RandomF32(6.f, 16.f);
+    }
+}
+
+CUSTOM_COMMAND_SIG(fleury_write_text_input)
+CUSTOM_DOC("Inserts whatever text was used to trigger this command.")
+{
+    User_Input in = get_current_input(app);
+    String_Const_u8 insert = to_writable(&in);
+    write_text(app, insert);
+    Fleury4SpawnPowerModeParticles(app, get_active_view(app, Access_ReadWriteVisible));
+}
+
+CUSTOM_COMMAND_SIG(fleury_write_text_and_auto_indent)
+CUSTOM_DOC("Inserts text and auto-indents the line on which the cursor sits if any of the text contains 'layout punctuation' such as ;:{}()[]# and new lines.")
+{
+    User_Input in = get_current_input(app);
+    String_Const_u8 insert = to_writable(&in);
+    if (insert.str != 0 && insert.size > 0){
+        b32 do_auto_indent = false;
+        for (u64 i = 0; !do_auto_indent && i < insert.size; i += 1){
+            switch (insert.str[i]){
+                case ';': case ':':
+                case '{': case '}':
+                case '(': case ')':
+                case '[': case ']':
+                case '#':
+                case '\n': case '\t':
+                {
+                    do_auto_indent = true;
+                }break;
+            }
+        }
+        if (do_auto_indent){
+            View_ID view = get_active_view(app, Access_ReadWriteVisible);
+            Buffer_ID buffer = view_get_buffer(app, view, Access_ReadWriteVisible);
+            Range_i64 pos = {};
+            pos.min = view_get_cursor_pos(app, view);
+            write_text_input(app);
+            pos.max= view_get_cursor_pos(app, view);
+            auto_indent_buffer(app, buffer, pos, 0);
+            move_past_lead_whitespace(app, view, buffer);
+        }
+        else{
+            write_text_input(app);
+        }
+    }
+    Fleury4SpawnPowerModeParticles(app, get_active_view(app, Access_ReadWriteVisible));
+}
+
 CUSTOM_COMMAND_SIG(fleury_toggle_colors)
 CUSTOM_DOC("Toggles light/dark mode.")
 {
@@ -68,6 +200,19 @@ CUSTOM_DOC("Toggles light/dark mode.")
     {
         Fleury4DarkMode(app);
         global_dark_mode = 1;
+    }
+}
+
+CUSTOM_COMMAND_SIG(fleury_toggle_power_mode)
+CUSTOM_DOC("Toggles power mode.")
+{
+    if(global_power_mode_enabled)
+    {
+        global_power_mode_enabled = 0;
+    }
+    else
+    {
+        global_power_mode_enabled = 1;
     }
 }
 
@@ -146,8 +291,8 @@ custom_layer_init(Application_Links *app)
     // NOTE(allen): default hooks and command maps
     {
     set_all_default_hooks(app);
-        set_custom_hook(app, HookID_RenderCaller, Fleury4Render);
-        set_custom_hook(app, HookID_BeginBuffer, Fleury4BeginBuffer);
+        set_custom_hook(app, HookID_RenderCaller,  Fleury4Render);
+        set_custom_hook(app, HookID_BeginBuffer,   Fleury4BeginBuffer);
     mapping_init(tctx, &framework_mapping);
     Fleury4SetBindings(&framework_mapping);
     }
@@ -397,6 +542,10 @@ Fleury4RenderCursor(Application_Links *app, View_ID view_id, b32 is_active_view,
                 {
                     cursor_color = fcolor_argb(0xffde40df);
                 }
+                else if(global_power_mode_enabled)
+                {
+                    cursor_color = fcolor_argb(0xffefaf2f);
+                }
                 
                 // NOTE(rjf): Draw main cursor.
                 {
@@ -404,9 +553,9 @@ Fleury4RenderCursor(Application_Links *app, View_ID view_id, b32 is_active_view,
                 }
                 
                 // NOTE(rjf): Draw cursor glow (because why the hell not).
-                for(int i = 0; i < 8; ++i)
+                for(int i = 0; i < 20; ++i)
                 {
-                    f32 alpha = 0.1f - i*0.015f;
+                    f32 alpha = 0.1f - (global_power_mode_enabled ? (i*0.005f) : (i*0.015f));
                     if(alpha > 0)
                     {
                     Rect_f32 glow_rect = rect;
@@ -414,7 +563,11 @@ Fleury4RenderCursor(Application_Links *app, View_ID view_id, b32 is_active_view,
                     glow_rect.y0 -= i;
                     glow_rect.x1 += i;
                     glow_rect.y1 += i;
-                        draw_rectangle(app, glow_rect, roundness + i*0.3f, fcolor_resolve(fcolor_change_alpha(cursor_color, alpha)));
+                        draw_rectangle(app, glow_rect, roundness + i*0.7f, fcolor_resolve(fcolor_change_alpha(cursor_color, alpha)));
+                    }
+                    else
+                    {
+                        break;
                     }
                 }
                 
@@ -438,6 +591,61 @@ Fleury4RenderCursor(Application_Links *app, View_ID view_id, b32 is_active_view,
         }
         
     }
+}
+
+static void
+Fleury4RenderPowerMode(Application_Links *app, View_ID view, Face_ID face, Frame_Info frame_info)
+{
+    Buffer_Scroll buffer_scroll = view_get_buffer_scroll(app, view);
+    Face_Metrics metrics = get_face_metrics(app, face);
+    
+    if(global_power_mode.particle_count > 0)
+    {
+        animate_in_n_milliseconds(app, 0);
+    }
+    
+    f32 camera_x = buffer_scroll.position.pixel_shift.x;
+    f32 camera_y = buffer_scroll.position.pixel_shift.y + buffer_scroll.position.line_number*metrics.line_height;
+    
+    for(int i = 0; i < global_power_mode.particle_count;)
+    {
+        // NOTE(rjf): Update particle.
+        {
+            global_power_mode.particles[i].x += global_power_mode.particles[i].velocity_x * frame_info.animation_dt;
+            global_power_mode.particles[i].y += global_power_mode.particles[i].velocity_y * frame_info.animation_dt;
+            global_power_mode.particles[i].velocity_x -= global_power_mode.particles[i].velocity_x * frame_info.animation_dt * 1.5f;
+            global_power_mode.particles[i].velocity_y -= global_power_mode.particles[i].velocity_y * frame_info.animation_dt * 1.5f;
+            global_power_mode.particles[i].velocity_y += 10.f * frame_info.animation_dt;
+            global_power_mode.particles[i].alpha -= 0.5f * frame_info.animation_dt;
+        }
+        
+        if(global_power_mode.particles[i].alpha <= 0.f)
+        {
+            global_power_mode.particles[i] = global_power_mode.particles[--global_power_mode.particle_count];
+        }
+        else
+        {
+            // NOTE(rjf): Render particle.
+            {
+                Rect_f32 rect =
+                {
+                    global_power_mode.particles[i].x - global_power_mode.particles[i].scale - camera_x,
+                    global_power_mode.particles[i].y - global_power_mode.particles[i].scale - camera_y,
+                    global_power_mode.particles[i].x + global_power_mode.particles[i].scale - camera_x,
+                    global_power_mode.particles[i].y + global_power_mode.particles[i].scale - camera_y,
+                };
+                f32 roundness = global_power_mode.particles[i].roundness;
+                ARGB_Color color = global_power_mode.particles[i].color;
+                color &= 0x00ffffff;
+                color |= ((u32)(global_power_mode.particles[i].alpha * 60.f)) << 24;
+                draw_rectangle(app, rect, roundness, color);
+            }
+            
+            ++i;
+        }
+        
+    }
+    
 }
 
 static void
@@ -1021,6 +1229,11 @@ Fleury4RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id,
         Fleury4RenderCodePeek(app, view_id, face_id, buffer, frame_info);
     }
     
+    // NOTE(rjf): Draw power mode.
+    {
+        Fleury4RenderPowerMode(app, view_id, face_id, frame_info);
+    }
+    
     draw_set_clip(app, prev_clip);
 }
 
@@ -1100,6 +1313,11 @@ animate_in_n_milliseconds(app, 1000);
     
     // NOTE(allen): begin buffer render
     Buffer_Point buffer_point = scroll.position;
+    if(is_active_view)
+    {
+    buffer_point.pixel_shift.y += global_power_mode.screen_shake*1.f;
+        global_power_mode.screen_shake -= global_power_mode.screen_shake * frame_info.animation_dt * 12.f;
+    }
     Text_Layout_ID text_layout_id = text_layout_create(app, buffer, region, buffer_point);
     
     // NOTE(allen): draw line numbers
@@ -1174,11 +1392,12 @@ Fleury4SetBindings(Mapping *mapping)
         Bind(open_panel_hsplit, KeyCode_Minus, KeyCode_Control);
         Bind(close_panel, KeyCode_P, KeyCode_Control, KeyCode_Shift);
         Bind(fleury_toggle_colors, KeyCode_Tick, KeyCode_Control);
+        Bind(fleury_toggle_power_mode, KeyCode_P, KeyCode_Alt);
     }
     
     SelectMap(mapid_file);
     ParentMap(mapid_global);
-    BindTextInput(write_text_input);
+    BindTextInput(fleury_write_text_input);
     BindMouse(click_set_cursor_and_mark, MouseCode_Left);
     BindMouseRelease(click_set_cursor, MouseCode_Left);
     BindCore(click_set_cursor_and_mark, CoreCode_ClickActivateView);
@@ -1243,7 +1462,7 @@ Fleury4SetBindings(Mapping *mapping)
     
     SelectMap(mapid_code);
     ParentMap(mapid_file);
-    BindTextInput(write_text_and_auto_indent);
+    BindTextInput(fleury_write_text_and_auto_indent);
     Bind(move_left_alpha_numeric_boundary,           KeyCode_Left, KeyCode_Control);
     Bind(move_right_alpha_numeric_boundary,          KeyCode_Right, KeyCode_Control);
     Bind(move_left_alpha_numeric_or_camel_boundary,  KeyCode_Left, KeyCode_Alt);
