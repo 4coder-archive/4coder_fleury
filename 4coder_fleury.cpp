@@ -1,17 +1,25 @@
 #include <stdlib.h>
 #include "4coder_default_include.cpp"
 
+#pragma warning(disable : 4706)
+
+//~ NOTE(rjf): Hooks
+static i32  Fleury4BeginBuffer(Application_Links *app, Buffer_ID buffer_id);
+static void Fleury4Render(Application_Links *app, Frame_Info frame_info, View_ID view_id);
+static Layout_Item_List Fleury4Layout(Application_Links *app, Arena *arena, Buffer_ID buffer, Range_i64 range, Face_ID face, f32 width);
+
+//~ NOTE(rjf): Helpers
 static void Fleury4LightMode(Application_Links *app);
 static void Fleury4DarkMode(Application_Links *app);
 static void Fleury4DrawCTokenColors(Application_Links *app, Text_Layout_ID text_layout_id, Token_Array *array);
-static void Fleury4Render(Application_Links *app, Frame_Info frame_info, View_ID view_id);
 static void Fleury4RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id, Buffer_ID buffer, Text_Layout_ID text_layout_id, Rect_f32 rect, Frame_Info frame_info);
 static void Fleury4SetBindings(Mapping *mapping);
 static void Fleury4OpenCodePeek(Application_Links *app, String_Const_u8 base_needle, String_Match_Flag must_have_flags, String_Match_Flag must_not_have_flags);
 static void Fleury4CloseCodePeek(void);
 static void Fleury4NextCodePeek(void);
 static void Fleury4CodePeekGo(Application_Links *app);
-BUFFER_HOOK_SIG(Fleury4BeginBuffer);
+
+//~ NOTE(rjf): Globals
 static b32 global_dark_mode = 1;
 static Vec2_f32 global_smooth_cursor_position = {0};
 static b32 global_code_peek_open = 0;
@@ -20,7 +28,6 @@ String_Match global_code_peek_matches[16] = {0};
 static int global_code_peek_selected_index = -1;
 static f32 global_code_peek_open_transition = 0.f;
 static Range_i64 global_code_peek_token_range;
-
 static b32 global_power_mode_enabled = 0;
 static struct
 {
@@ -41,11 +48,141 @@ static struct
 }
 global_power_mode;
 
+//~ NOTE(rjf): Utilities
+
+typedef struct MemoryArena MemoryArena;
+struct MemoryArena
+{
+    void *buffer;
+    u32 buffer_size;
+    u32 alloc_position;
+    u32 bytes_left;
+};
+
+static MemoryArena
+MemoryArenaInit(void *buffer, u32 buffer_size)
+{
+    MemoryArena arena = {0};
+    arena.buffer = buffer;
+    arena.buffer_size = buffer_size;
+    arena.bytes_left = arena.buffer_size;
+    return arena;
+}
+
+static void *
+MemoryArenaAllocate(MemoryArena *arena, u32 size)
+{
+    void *memory = 0;
+    if(arena->bytes_left >= size)
+    {
+        memory = (char *)arena->buffer + arena->alloc_position;
+        arena->alloc_position += size;
+        arena->bytes_left -= size;
+        u32 bytes_to_align = arena->alloc_position % 16;
+        arena->alloc_position += bytes_to_align;
+        arena->bytes_left -= bytes_to_align;
+    }
+    return memory;
+}
+
+static void
+MemoryArenaClear(MemoryArena *arena)
+{
+    arena->bytes_left = arena->buffer_size;
+    arena->alloc_position = 0;
+}
+
 static f32
 RandomF32(f32 low, f32 high)
 {
     return low + (high - low) * (((int)rand() % 10000) / 10000.f);
 }
+
+static f32
+MinimumF32(f32 a, f32 b)
+{
+    return a < b ? a : b;
+}
+
+static f32
+MaximumF32(f32 a, f32 b)
+{
+    return a > b ? a : b;
+}
+
+static ARGB_Color
+ARGBFromID(Managed_ID id)
+{
+    return fcolor_resolve(fcolor_id(id));
+}
+
+static b32
+CharIsAlpha(int c)
+{
+    return ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z'));
+}
+
+static b32
+CharIsDigit(int c)
+{
+    return (c >= '0' && c <= '9');
+}
+
+static b32
+CharIsSymbol(int c)
+{
+    return (c == '~' ||
+            c == '`' ||
+            c == '!' ||
+            c == '#' ||
+            c == '$' ||
+            c == '%' ||
+            c == '^' ||
+            c == '&' ||
+            c == '*' ||
+            c == '(' ||
+            c == ')' ||
+            c == '-' ||
+            c == '+' ||
+            c == '=' ||
+            c == '{' ||
+            c == '}' ||
+            c == '[' ||
+            c == ']' ||
+            c == ':' ||
+            c == ';' ||
+            c == '<' ||
+            c == '>' ||
+            c == ',' ||
+            c == '.' ||
+            c == '?' ||
+            c == '/');
+}
+
+static double
+GetFirstDoubleFromBuffer(char *buffer)
+{
+    char number_str[256];
+    int number_write_pos = 0;
+    double value = 0;
+    for(int i = 0; buffer[i] && number_write_pos < sizeof(number_str); ++i)
+    {
+        if(CharIsDigit(buffer[i]) || buffer[i] == '.')
+        {
+            number_str[number_write_pos++] = buffer[i];
+        }
+        else
+        {
+            number_str[number_write_pos++] = 0;
+            break;
+        }
+    }
+    number_str[sizeof(number_str)-1] = 0;
+    value = atof(number_str);
+    return value;
+}
+
+//~ NOTE(rjf): Power Mode
 
 static void
 Fleury4Particle(f32 x, f32 y, f32 velocity_x, f32 velocity_y, ARGB_Color color,
@@ -65,18 +202,6 @@ Fleury4Particle(f32 x, f32 y, f32 velocity_x, f32 velocity_y, ARGB_Color color,
     }
 }
 
-static f32
-MinimumF32(f32 a, f32 b)
-{
-    return a < b ? a : b;
-}
-
-static f32
-MaximumF32(f32 a, f32 b)
-{
-    return a > b ? a : b;
-}
-
 static Vec2_f32
 Fleury4GetCameraFromView(Application_Links *app, View_ID view)
 {
@@ -92,29 +217,6 @@ Fleury4GetCameraFromView(Application_Links *app, View_ID view)
     };
     
     return v;
-}
-
-static String_Const_u8_Array
-Fleury4MakeTypeSearchList(Application_Links *app, Arena *arena, String_Const_u8 base_needle)
-{
-    String_Const_u8_Array result = {0};
-    if(base_needle.size > 0)
-    {
-        result.count = 9;
-        result.vals = push_array(arena, String_Const_u8, result.count);
-        i32 i = 0;
-        result.vals[i++] = (push_u8_stringf(arena, "struct %.*s{"  , string_expand(base_needle)));
-        result.vals[i++] = (push_u8_stringf(arena, "struct %.*s\n{", string_expand(base_needle)));
-        result.vals[i++] = (push_u8_stringf(arena, "struct %.*s {" , string_expand(base_needle)));
-        result.vals[i++] = (push_u8_stringf(arena, "union %.*s{"   , string_expand(base_needle)));
-        result.vals[i++] = (push_u8_stringf(arena, "union %.*s\n{" , string_expand(base_needle)));
-        result.vals[i++] = (push_u8_stringf(arena, "union %.*s {"  , string_expand(base_needle)));
-        result.vals[i++] = (push_u8_stringf(arena, "enum %.*s{"    , string_expand(base_needle)));
-        result.vals[i++] = (push_u8_stringf(arena, "enum %.*s\n{"  , string_expand(base_needle)));
-        result.vals[i++] = (push_u8_stringf(arena, "enum %.*s {"   , string_expand(base_needle)));
-        Assert(i == result.count);
-    }
-    return(result);
 }
 
 static void
@@ -141,6 +243,241 @@ Fleury4SpawnPowerModeParticles(Application_Links *app, View_ID view)
         global_power_mode.screen_shake += RandomF32(6.f, 16.f);
     }
 }
+
+static void
+Fleury4RenderPowerMode(Application_Links *app, View_ID view, Face_ID face, Frame_Info frame_info)
+{
+    Buffer_Scroll buffer_scroll = view_get_buffer_scroll(app, view);
+    Face_Metrics metrics = get_face_metrics(app, face);
+    
+    if(global_power_mode.particle_count > 0)
+    {
+        animate_in_n_milliseconds(app, 0);
+    }
+    
+    f32 camera_x = buffer_scroll.position.pixel_shift.x;
+    f32 camera_y = buffer_scroll.position.pixel_shift.y + buffer_scroll.position.line_number*metrics.line_height;
+    
+    for(int i = 0; i < global_power_mode.particle_count;)
+    {
+        // NOTE(rjf): Update particle.
+        {
+            global_power_mode.particles[i].x += global_power_mode.particles[i].velocity_x * frame_info.animation_dt;
+            global_power_mode.particles[i].y += global_power_mode.particles[i].velocity_y * frame_info.animation_dt;
+            global_power_mode.particles[i].velocity_x -= global_power_mode.particles[i].velocity_x * frame_info.animation_dt * 1.5f;
+            global_power_mode.particles[i].velocity_y -= global_power_mode.particles[i].velocity_y * frame_info.animation_dt * 1.5f;
+            global_power_mode.particles[i].velocity_y += 10.f * frame_info.animation_dt;
+            global_power_mode.particles[i].alpha -= 0.5f * frame_info.animation_dt;
+        }
+        
+        if(global_power_mode.particles[i].alpha <= 0.f)
+        {
+            global_power_mode.particles[i] = global_power_mode.particles[--global_power_mode.particle_count];
+        }
+        else
+        {
+            // NOTE(rjf): Render particle.
+            {
+                Rect_f32 rect =
+                {
+                    global_power_mode.particles[i].x - global_power_mode.particles[i].scale - camera_x,
+                    global_power_mode.particles[i].y - global_power_mode.particles[i].scale - camera_y,
+                    global_power_mode.particles[i].x + global_power_mode.particles[i].scale - camera_x,
+                    global_power_mode.particles[i].y + global_power_mode.particles[i].scale - camera_y,
+                };
+                f32 roundness = global_power_mode.particles[i].roundness;
+                ARGB_Color color = global_power_mode.particles[i].color;
+                color &= 0x00ffffff;
+                color |= ((u32)(global_power_mode.particles[i].alpha * 60.f)) << 24;
+                draw_rectangle(app, rect, roundness, color);
+            }
+            
+            ++i;
+        }
+        
+    }
+    
+}
+
+//~ NOTE(rjf): Code Peek
+
+static String_Const_u8_Array
+Fleury4MakeTypeSearchList(Application_Links *app, Arena *arena, String_Const_u8 base_needle)
+{
+    String_Const_u8_Array result = {0};
+    if(base_needle.size > 0)
+    {
+        result.count = 9;
+        result.vals = push_array(arena, String_Const_u8, result.count);
+        i32 i = 0;
+        result.vals[i++] = (push_u8_stringf(arena, "struct %.*s{"  , string_expand(base_needle)));
+        result.vals[i++] = (push_u8_stringf(arena, "struct %.*s\n{", string_expand(base_needle)));
+        result.vals[i++] = (push_u8_stringf(arena, "struct %.*s {" , string_expand(base_needle)));
+        result.vals[i++] = (push_u8_stringf(arena, "union %.*s{"   , string_expand(base_needle)));
+        result.vals[i++] = (push_u8_stringf(arena, "union %.*s\n{" , string_expand(base_needle)));
+        result.vals[i++] = (push_u8_stringf(arena, "union %.*s {"  , string_expand(base_needle)));
+        result.vals[i++] = (push_u8_stringf(arena, "enum %.*s{"    , string_expand(base_needle)));
+        result.vals[i++] = (push_u8_stringf(arena, "enum %.*s\n{"  , string_expand(base_needle)));
+        result.vals[i++] = (push_u8_stringf(arena, "enum %.*s {"   , string_expand(base_needle)));
+        Assert(i == result.count);
+    }
+    return(result);
+}
+
+
+static void
+Fleury4OpenCodePeek(Application_Links *app, String_Const_u8 base_needle,
+                    String_Match_Flag must_have_flags, String_Match_Flag must_not_have_flags)
+{
+    global_code_peek_match_count = 0;
+    
+    global_code_peek_open_transition = 0.f;
+    
+    Scratch_Block scratch(app);
+    String_Const_u8_Array type_array = Fleury4MakeTypeSearchList(app, scratch, base_needle);
+    String_Match_List matches = find_all_matches_all_buffers(app, scratch, type_array, must_have_flags, must_not_have_flags);
+    string_match_list_filter_remove_buffer_predicate(app, &matches, buffer_has_name_with_star);
+    
+    for(String_Match *match = matches.first; match; match = match->next)
+    {
+        global_code_peek_matches[global_code_peek_match_count++] = *match;
+        if(global_code_peek_match_count >= sizeof(global_code_peek_matches)/sizeof(global_code_peek_matches[0]))
+        {
+            break;
+        }
+    }
+    
+    matches = find_all_matches_all_buffers(app, scratch, base_needle, must_have_flags, must_not_have_flags);
+    
+    if(global_code_peek_match_count == 0)
+    {
+        for(String_Match *match = matches.first; match; match = match->next)
+        {
+            global_code_peek_matches[global_code_peek_match_count++] = *match;
+            if(global_code_peek_match_count >= sizeof(global_code_peek_matches)/sizeof(global_code_peek_matches[0]))
+            {
+                break;
+            }
+        }
+    }
+    
+    if(global_code_peek_match_count > 0)
+    {
+        global_code_peek_selected_index = 0;
+        global_code_peek_open = 1;
+    }
+    else
+    {
+        global_code_peek_selected_index = -1;
+        global_code_peek_open = 0;
+    }
+}
+
+static void
+Fleury4CloseCodePeek(void)
+{
+    global_code_peek_open = 0;
+}
+
+static void
+Fleury4NextCodePeek(void)
+{
+    if(++global_code_peek_selected_index >= global_code_peek_match_count)
+    {
+        global_code_peek_selected_index = 0;
+    }
+    
+    if(global_code_peek_selected_index >= global_code_peek_match_count)
+    {
+        global_code_peek_selected_index = -1;
+        global_code_peek_open = 0;
+    }
+}
+
+static void
+Fleury4CodePeekGo(Application_Links *app)
+{
+    if(global_code_peek_selected_index >= 0 && global_code_peek_selected_index < global_code_peek_match_count &&
+       global_code_peek_match_count > 0)
+    {
+        View_ID view = get_active_view(app, Access_Always);
+        String_Match *match = &global_code_peek_matches[global_code_peek_selected_index];
+        view = get_next_view_looped_primary_panels(app, view, Access_Always);
+        view_set_buffer(app, view, match->buffer, 0);
+        i64 line_number = get_line_number_from_pos(app, match->buffer, match->range.start);
+        Buffer_Scroll scroll = view_get_buffer_scroll(app, view);
+        scroll.position.line_number = scroll.target.line_number = line_number;
+        view_set_buffer_scroll(app, view, scroll, SetBufferScroll_SnapCursorIntoView);
+        Fleury4CloseCodePeek();
+    }
+}
+
+static void
+Fleury4RenderCodePeek(Application_Links *app, View_ID view_id, Face_ID face_id, Buffer_ID buffer,
+                      Frame_Info frame_info)
+{
+    if(global_code_peek_open &&
+       global_code_peek_selected_index >= 0 &&
+       global_code_peek_selected_index < global_code_peek_match_count)
+    {
+        String_Match *match = &global_code_peek_matches[global_code_peek_selected_index];
+        
+        global_code_peek_open_transition += (1.f - global_code_peek_open_transition) * frame_info.animation_dt * 14.f;
+        if(fabs(global_code_peek_open_transition - 1.f) > 0.005f)
+        {
+            animate_in_n_milliseconds(app, 0);
+        }
+        
+        Rect_f32 rect = {0};
+        rect.x0 = (float)((int)global_smooth_cursor_position.x + 16);
+        rect.y0 = (float)((int)global_smooth_cursor_position.y + 16);
+        rect.x1 = (float)((int)rect.x0 + 400);
+        rect.y1 = (float)((int)rect.y0 + 600*global_code_peek_open_transition);
+        
+        draw_rectangle(app, rect, 4.f, fcolor_resolve(fcolor_id(defcolor_back)));
+        draw_rectangle_outline(app, rect, 4.f, 3.f, fcolor_resolve(fcolor_id(defcolor_pop2)));
+        
+        if(rect.y1 - rect.y0 > 60.f)
+        {
+            rect.x0 += 30;
+            rect.y0 += 30;
+            rect.x1 -= 30;
+            rect.y1 -= 30;
+            
+            Buffer_Point buffer_point =
+            {
+                get_line_number_from_pos(app, match->buffer, match->range.start),
+                0,
+            };
+            Text_Layout_ID text_layout_id = text_layout_create(app, match->buffer, rect, buffer_point);
+            
+            Rect_f32 prev_clip = draw_set_clip(app, rect);
+            {
+                Token_Array token_array = get_token_array_from_buffer(app, match->buffer);
+                if(token_array.tokens != 0)
+                {
+                    Fleury4DrawCTokenColors(app, text_layout_id, &token_array);
+                }
+                else
+                {
+                    Range_i64 visible_range = match->range;
+                    paint_text_color_fcolor(app, text_layout_id, visible_range, fcolor_id(defcolor_text_default));
+                }
+                
+                draw_text_layout_default(app, text_layout_id);
+            }
+            draw_set_clip(app, prev_clip);
+            text_layout_free(app, text_layout_id);
+        }
+    }
+    else
+    {
+        global_code_peek_open_transition = 0.f;
+    }
+    
+}
+
+//~ NOTE(rjf): Commands
 
 CUSTOM_COMMAND_SIG(fleury_write_text_input)
 CUSTOM_DOC("Inserts whatever text was used to trigger this command.")
@@ -272,6 +609,8 @@ CUSTOM_DOC("Goes to the beginning of the line.")
     view_set_buffer_scroll(app, view, scroll, SetBufferScroll_NoCursorChange);
 }
 
+//~ NOTE(rjf): Custom layer initialization
+
 void
 custom_layer_init(Application_Links *app)
 {
@@ -293,12 +632,15 @@ custom_layer_init(Application_Links *app)
     set_all_default_hooks(app);
         set_custom_hook(app, HookID_RenderCaller,  Fleury4Render);
         set_custom_hook(app, HookID_BeginBuffer,   Fleury4BeginBuffer);
+        set_custom_hook(app, HookID_Layout,        Fleury4Layout);
     mapping_init(tctx, &framework_mapping);
     Fleury4SetBindings(&framework_mapping);
     }
     
     Fleury4DarkMode(app);
 }
+
+//~ NOTE(rjf): Light/Dark Mode
 
 static void
 Fleury4LightMode(Application_Links *app)
@@ -396,92 +738,7 @@ Fleury4DarkMode(Application_Links *app)
     table->arrays[defcolor_line_numbers_text]     = make_colors(arena, 0xFF404040);
 }
 
-static void
-Fleury4OpenCodePeek(Application_Links *app, String_Const_u8 base_needle,
-                    String_Match_Flag must_have_flags, String_Match_Flag must_not_have_flags)
-{
-    global_code_peek_match_count = 0;
-    
-    global_code_peek_open_transition = 0.f;
-    
-    Scratch_Block scratch(app);
-    String_Const_u8_Array type_array = Fleury4MakeTypeSearchList(app, scratch, base_needle);
-    String_Match_List matches = find_all_matches_all_buffers(app, scratch, type_array, must_have_flags, must_not_have_flags);
-    string_match_list_filter_remove_buffer_predicate(app, &matches, buffer_has_name_with_star);
-    
-    for(String_Match *match = matches.first; match; match = match->next)
-    {
-        global_code_peek_matches[global_code_peek_match_count++] = *match;
-        if(global_code_peek_match_count >= sizeof(global_code_peek_matches)/sizeof(global_code_peek_matches[0]))
-        {
-            break;
-        }
-    }
-    
-    matches = find_all_matches_all_buffers(app, scratch, base_needle, must_have_flags, must_not_have_flags);
-    
-    if(global_code_peek_match_count == 0)
-    {
-        for(String_Match *match = matches.first; match; match = match->next)
-        {
-            global_code_peek_matches[global_code_peek_match_count++] = *match;
-            if(global_code_peek_match_count >= sizeof(global_code_peek_matches)/sizeof(global_code_peek_matches[0]))
-            {
-                break;
-            }
-        }
-    }
-    
-    if(global_code_peek_match_count > 0)
-    {
-        global_code_peek_selected_index = 0;
-        global_code_peek_open = 1;
-    }
-    else
-    {
-        global_code_peek_selected_index = -1;
-        global_code_peek_open = 0;
-    }
-}
-
-static void
-Fleury4CloseCodePeek(void)
-{
-    global_code_peek_open = 0;
-}
-
-static void
-Fleury4NextCodePeek(void)
-{
-    if(++global_code_peek_selected_index >= global_code_peek_match_count)
-    {
-        global_code_peek_selected_index = 0;
-    }
-    
-    if(global_code_peek_selected_index >= global_code_peek_match_count)
-    {
-        global_code_peek_selected_index = -1;
-        global_code_peek_open = 0;
-    }
-}
-
-static void
-Fleury4CodePeekGo(Application_Links *app)
-{
-    if(global_code_peek_selected_index >= 0 && global_code_peek_selected_index < global_code_peek_match_count &&
-       global_code_peek_match_count > 0)
-    {
-        View_ID view = get_active_view(app, Access_Always);
-        String_Match *match = &global_code_peek_matches[global_code_peek_selected_index];
-        view = get_next_view_looped_primary_panels(app, view, Access_Always);
-        view_set_buffer(app, view, match->buffer, 0);
-        i64 line_number = get_line_number_from_pos(app, match->buffer, match->range.start);
-        Buffer_Scroll scroll = view_get_buffer_scroll(app, view);
-        scroll.position.line_number = scroll.target.line_number = line_number;
-        view_set_buffer_scroll(app, view, scroll, SetBufferScroll_SnapCursorIntoView);
-        Fleury4CloseCodePeek();
-    }
-}
+//~ NOTE(rjf): Cursor rendering
 
 static void
 Fleury4RenderCursor(Application_Links *app, View_ID view_id, b32 is_active_view,
@@ -593,60 +850,7 @@ Fleury4RenderCursor(Application_Links *app, View_ID view_id, b32 is_active_view,
     }
 }
 
-static void
-Fleury4RenderPowerMode(Application_Links *app, View_ID view, Face_ID face, Frame_Info frame_info)
-{
-    Buffer_Scroll buffer_scroll = view_get_buffer_scroll(app, view);
-    Face_Metrics metrics = get_face_metrics(app, face);
-    
-    if(global_power_mode.particle_count > 0)
-    {
-        animate_in_n_milliseconds(app, 0);
-    }
-    
-    f32 camera_x = buffer_scroll.position.pixel_shift.x;
-    f32 camera_y = buffer_scroll.position.pixel_shift.y + buffer_scroll.position.line_number*metrics.line_height;
-    
-    for(int i = 0; i < global_power_mode.particle_count;)
-    {
-        // NOTE(rjf): Update particle.
-        {
-            global_power_mode.particles[i].x += global_power_mode.particles[i].velocity_x * frame_info.animation_dt;
-            global_power_mode.particles[i].y += global_power_mode.particles[i].velocity_y * frame_info.animation_dt;
-            global_power_mode.particles[i].velocity_x -= global_power_mode.particles[i].velocity_x * frame_info.animation_dt * 1.5f;
-            global_power_mode.particles[i].velocity_y -= global_power_mode.particles[i].velocity_y * frame_info.animation_dt * 1.5f;
-            global_power_mode.particles[i].velocity_y += 10.f * frame_info.animation_dt;
-            global_power_mode.particles[i].alpha -= 0.5f * frame_info.animation_dt;
-        }
-        
-        if(global_power_mode.particles[i].alpha <= 0.f)
-        {
-            global_power_mode.particles[i] = global_power_mode.particles[--global_power_mode.particle_count];
-        }
-        else
-        {
-            // NOTE(rjf): Render particle.
-            {
-                Rect_f32 rect =
-                {
-                    global_power_mode.particles[i].x - global_power_mode.particles[i].scale - camera_x,
-                    global_power_mode.particles[i].y - global_power_mode.particles[i].scale - camera_y,
-                    global_power_mode.particles[i].x + global_power_mode.particles[i].scale - camera_x,
-                    global_power_mode.particles[i].y + global_power_mode.particles[i].scale - camera_y,
-                };
-                f32 roundness = global_power_mode.particles[i].roundness;
-                ARGB_Color color = global_power_mode.particles[i].color;
-                color &= 0x00ffffff;
-                color |= ((u32)(global_power_mode.particles[i].alpha * 60.f)) << 24;
-                draw_rectangle(app, rect, roundness, color);
-            }
-            
-            ++i;
-        }
-        
-    }
-    
-}
+//~ NOTE(rjf): Brace highlight
 
 static void
 Fleury4RenderBraceHighlight(Application_Links *app, Buffer_ID buffer, Text_Layout_ID text_layout_id,
@@ -685,6 +889,8 @@ Fleury4RenderBraceHighlight(Application_Links *app, Buffer_ID buffer, Text_Layou
                     RangeHighlightKind_CharacterHighlight,
                     0, 0, colors, color_count);
 }
+
+//~ NOTE(rjf): Closing-brace Annotation
 
 static void
 Fleury4RenderCloseBraceAnnotation(Application_Links *app, Buffer_ID buffer, Text_Layout_ID text_layout_id,
@@ -813,6 +1019,8 @@ Fleury4RenderCloseBraceAnnotation(Application_Links *app, Buffer_ID buffer, Text
     
 }
 
+//~ NOTE(rjf): Brace lines
+
 static void
 Fleury4RenderBraceLines(Application_Links *app, Buffer_ID buffer, View_ID view,
                         Text_Layout_ID text_layout_id, i64 pos)
@@ -890,6 +1098,8 @@ Fleury4RenderBraceLines(Application_Links *app, Buffer_ID buffer, View_ID view,
     
 }
 
+//~ NOTE(rjf): Range highlight
+
 static void
 Fleury4RenderRangeHighlight(Application_Links *app, View_ID view_id, Text_Layout_ID text_layout_id,
                             Range_i64 range)
@@ -916,76 +1126,531 @@ Fleury4RenderRangeHighlight(Application_Links *app, View_ID view_id, Text_Layout
     draw_rectangle(app, total_range_rect, 4.f, highlight_color);
 }
 
+//~ NOTE(rjf): Divider Comments
+
 static void
-Fleury4RenderCodePeek(Application_Links *app, View_ID view_id, Face_ID face_id, Buffer_ID buffer,
-                      Frame_Info frame_info)
+Fleury4RenderDividerComments(Application_Links *app, Buffer_ID buffer, View_ID view,
+                             Text_Layout_ID text_layout_id)
 {
-    if(global_code_peek_open &&
-       global_code_peek_selected_index >= 0 &&
-       global_code_peek_selected_index < global_code_peek_match_count)
+    String_Const_u8 divider_comment_signifier =
     {
-        String_Match *match = &global_code_peek_matches[global_code_peek_selected_index];
+        "//~",
+        0,
+    };
+    int divider_comment_signifier_length = 0;
+    for(; divider_comment_signifier.str[divider_comment_signifier_length];
+        ++divider_comment_signifier_length);
+    divider_comment_signifier.size = divider_comment_signifier_length;
+    
+    Token_Array token_array = get_token_array_from_buffer(app, buffer);
+    Range_i64 visible_range = text_layout_get_visible_range(app, text_layout_id);
+    Scratch_Block scratch(app);
+    
+    if(token_array.tokens != 0)
+    {
+        i64 first_index = token_index_from_pos(&token_array, visible_range.first);
+        Token_Iterator_Array it = token_iterator_index(0, &token_array, first_index);
         
-        global_code_peek_open_transition += (1.f - global_code_peek_open_transition) * frame_info.animation_dt * 14.f;
-        if(fabs(global_code_peek_open_transition - 1.f) > 0.005f)
+        Token *token = 0;
+        for(;;)
         {
-            animate_in_n_milliseconds(app, 0);
-        }
-        
-        Rect_f32 rect = {0};
-        rect.x0 = (float)((int)global_smooth_cursor_position.x + 16);
-        rect.y0 = (float)((int)global_smooth_cursor_position.y + 16);
-        rect.x1 = (float)((int)rect.x0 + 400);
-        rect.y1 = (float)((int)rect.y0 + 600*global_code_peek_open_transition);
-        
-        draw_rectangle(app, rect, 4.f, fcolor_resolve(fcolor_id(defcolor_back)));
-        draw_rectangle_outline(app, rect, 4.f, 3.f, fcolor_resolve(fcolor_id(defcolor_pop2)));
-        
-        if(rect.y1 - rect.y0 > 60.f)
-        {
-        rect.x0 += 30;
-        rect.y0 += 30;
-        rect.x1 -= 30;
-        rect.y1 -= 30;
-        
-        Buffer_Point buffer_point =
-        {
-            get_line_number_from_pos(app, match->buffer, match->range.start),
-            0,
-        };
-        Text_Layout_ID text_layout_id = text_layout_create(app, match->buffer, rect, buffer_point);
-        
-        Rect_f32 prev_clip = draw_set_clip(app, rect);
-        {
-            Token_Array token_array = get_token_array_from_buffer(app, match->buffer);
-            if(token_array.tokens != 0)
+            token = token_it_read(&it);
+
+            if(token->pos >= visible_range.one_past_last || !token || !token_it_inc_non_whitespace(&it))
             {
-                    Fleury4DrawCTokenColors(app, text_layout_id, &token_array);
+                break;
             }
-            else
+
+            if(token->kind == TokenBaseKind_Comment)
             {
-                Range_i64 visible_range = match->range;
-                paint_text_color_fcolor(app, text_layout_id, visible_range, fcolor_id(defcolor_text_default));
+                Rect_f32 comment_first_char_rect =
+                    text_layout_character_on_screen(app, text_layout_id, token->pos);
+                
+                Range_i64 token_range =
+                {
+                    token->pos,
+                    token->pos + (token->size > divider_comment_signifier_length
+                                  ? divider_comment_signifier_length
+                                  : token->size),
+                };
+                
+                u8 token_buffer[256] = {0};
+                buffer_read_range(app, buffer, token_range, token_buffer);
+                String_Const_u8 token_string = { token_buffer, (u64)(token_range.end - token_range.start) };
+                
+                if(string_match(token_string, divider_comment_signifier))
+                {
+                    // NOTE(rjf): Render divider line.
+                    Rect_f32 rect =
+                    {
+                        comment_first_char_rect.x0,
+                        comment_first_char_rect.y0-2,
+                        10000,
+                        comment_first_char_rect.y0,
+                    };
+                    f32 roundness = 4.f;
+                    draw_rectangle(app, rect, roundness, fcolor_resolve(fcolor_id(defcolor_comment)));
+                }
+                
             }
             
-            draw_text_layout_default(app, text_layout_id);
         }
-        draw_set_clip(app, prev_clip);
-            text_layout_free(app, text_layout_id);
-        }
-    }
-    else
-    {
-        global_code_peek_open_transition = 0.f;
+        
     }
     
 }
 
-static ARGB_Color
-ARGBFromID(Managed_ID id)
+//~ NOTE(rjf): Calc Comments
+
+typedef enum CalcTokenType CalcTokenType;
+enum CalcTokenType
 {
-    return fcolor_resolve(fcolor_id(id));
+    CALC_TOKEN_TYPE_invalid,
+    CALC_TOKEN_TYPE_number,
+    CALC_TOKEN_TYPE_symbol,
+};
+
+typedef struct CalcToken CalcToken;
+struct CalcToken
+{
+    CalcTokenType type;
+    char *string;
+    int string_length;
+};
+
+static CalcToken
+Fleury4GetNextCalcToken(char *buffer)
+{
+    CalcToken token = {0};
+    
+    if(buffer)
+    {
+    for(int i = 0; buffer[i]; ++i)
+    {
+        if(CharIsDigit(buffer[i]))
+        {
+            token.type = CALC_TOKEN_TYPE_number;
+            token.string = buffer+i;
+            int j;
+            for(j = i+1; buffer[j] &&
+                (CharIsDigit(buffer[j]) || buffer[j] == '.' ||
+                 CharIsAlpha(buffer[j]));
+                ++j);
+            token.string_length = j - i;
+            break;
+        }
+        else  if(CharIsSymbol(buffer[i]))
+        {
+            token.type = CALC_TOKEN_TYPE_symbol;
+            token.string = buffer+i;
+            
+            // NOTE(rjf): Assumes 1-length symbols. Might not always be true.
+            int j = i+1;
+            // for(j = i+1; buffer[j] && CharIsSymbol(buffer[j]); ++j);
+            
+            token.string_length = j - i;
+            break;
+        }
+    }
+    }
+    
+    return token;
 }
+
+static CalcToken
+Fleury4NextCalcToken(char **at)
+{
+    CalcToken token = Fleury4GetNextCalcToken(*at);
+    *at = token.string + token.string_length;
+    return token;
+}
+
+static CalcToken
+Fleury4PeekCalcToken(char **at)
+{
+    CalcToken token = Fleury4GetNextCalcToken(*at);
+    return token;
+}
+
+static int
+Fleury4CalcTokenMatch(CalcToken token, char *str)
+{
+    int match = 0;
+    
+    if(token.string && token.string_length > 0 &&
+       token.type != CALC_TOKEN_TYPE_invalid)
+    {
+        match = 1;
+    for(int i = 0; i < token.string_length; ++i)
+    {
+        if(token.string[i] == str[i])
+        {
+            if(i == token.string_length-1)
+            {
+                if(str[i+1] != 0)
+                {
+                    match = 0;
+                    break;
+                }
+            }
+        }
+        else
+        {
+            match = 0;
+            break;
+        }
+        }
+    }
+    return match;
+}
+
+static CalcToken
+Fleury4RequireCalcToken(char **at, char *str)
+{
+    CalcToken token = Fleury4GetNextCalcToken(*at);
+    if(Fleury4CalcTokenMatch(token, str))
+    {
+        *at = token.string + token.string_length;
+    }
+    return token;
+}
+
+typedef enum CalcNodeType CalcNodeType;
+enum CalcNodeType
+{
+    CALC_NODE_TYPE_invalid,
+    CALC_NODE_TYPE_atom,
+    CALC_NODE_TYPE_add,
+    CALC_NODE_TYPE_subtract,
+    CALC_NODE_TYPE_multiply,
+    CALC_NODE_TYPE_divide,
+    CALC_NODE_TYPE_negate,
+};
+
+static int
+Fleury4CalcOperatorPrecedence(CalcNodeType type)
+{
+    static int precedence_table[] =
+    {
+        0,
+        0,
+        1,
+        1,
+        2,
+        2,
+        0,
+    };
+    return precedence_table[type];
+}
+
+typedef struct CalcNode CalcNode;
+struct CalcNode
+{
+    CalcNodeType type;
+    double value;
+    union
+    {
+        CalcNode *operand;
+        CalcNode *left;
+    };
+    CalcNode *right;
+};
+
+static CalcNode *Fleury4ParseCalcExpression(MemoryArena *arena, char **at_ptr);
+
+static CalcNode *
+Fleury4ParseCalcUnaryExpression(MemoryArena *arena, char **at_ptr)
+{
+    CalcNode *expression = 0;
+    
+    CalcToken token = Fleury4PeekCalcToken(at_ptr);
+    
+    if(Fleury4CalcTokenMatch(token, "("))
+    {
+        Fleury4NextCalcToken(at_ptr);
+        expression = Fleury4ParseCalcExpression(arena, at_ptr);
+        Fleury4RequireCalcToken(at_ptr, ")");
+    }
+    else if(token.type == CALC_TOKEN_TYPE_number)
+    {
+        Fleury4NextCalcToken(at_ptr);
+        expression = (CalcNode *)MemoryArenaAllocate(arena, sizeof(*expression));
+        expression->type = CALC_NODE_TYPE_atom;
+        expression->value = GetFirstDoubleFromBuffer(token.string);
+    }
+    
+    return expression;
+}
+
+static CalcNodeType
+Fleury4GetCalcBinaryOperatorTypeFromToken(CalcToken token)
+{
+    CalcNodeType type = CALC_NODE_TYPE_invalid;
+    switch(token.type)
+    {
+        case CALC_TOKEN_TYPE_symbol:
+        {
+            if(token.string[0] == '+')
+            {
+                type = CALC_NODE_TYPE_add;
+            }
+            else if(token.string[0] == '-')
+            {
+                type = CALC_NODE_TYPE_subtract;
+            }
+            else if(token.string[0] == '*')
+            {
+                type = CALC_NODE_TYPE_multiply;
+            }
+            else if(token.string[0] == '/')
+            {
+                type = CALC_NODE_TYPE_divide;
+            }
+            break;
+        }
+        default: break;
+    }
+    return type;
+}
+
+static CalcNode *
+Fleury4ParseCalcExpression_(MemoryArena *arena, char **at_ptr, int precedence_in)
+{
+    CalcNode *expression = Fleury4ParseCalcUnaryExpression(arena, at_ptr);
+    
+    if(!expression)
+    {
+        goto end_parse;
+    }
+    
+    CalcToken token = Fleury4PeekCalcToken(at_ptr);
+    CalcNodeType operator_type = Fleury4GetCalcBinaryOperatorTypeFromToken(token);
+    
+    if(token.string && operator_type != CALC_NODE_TYPE_invalid &&
+       operator_type != CALC_NODE_TYPE_atom)
+    {
+        for(int precedence = Fleury4CalcOperatorPrecedence(operator_type);
+            precedence >= precedence_in;
+            --precedence)
+        {
+            for(;;)
+            {
+                token = Fleury4PeekCalcToken(at_ptr);
+                
+                operator_type = Fleury4GetCalcBinaryOperatorTypeFromToken(token);
+                int operator_precedence = Fleury4CalcOperatorPrecedence(operator_type);
+                
+                if(operator_precedence != precedence)
+                {
+                    break;
+                }
+                
+                if(operator_type == CALC_NODE_TYPE_invalid)
+                {
+                    break;
+                }
+                
+                Fleury4NextCalcToken(at_ptr);
+                
+                 CalcNode *right = Fleury4ParseCalcExpression_(arena, at_ptr, precedence+1);
+                CalcNode *existing_expression = expression;
+                expression = (CalcNode *)MemoryArenaAllocate(arena, sizeof(*expression));
+                expression->type = operator_type;
+                expression->left = existing_expression;
+                expression->right = right;
+                
+                if(!right)
+                {
+                    goto end_parse;
+                }
+            }
+        }
+    }
+    
+    end_parse:;
+    return expression;
+}
+
+static CalcNode *
+Fleury4ParseCalcExpression(MemoryArena *arena, char **at_ptr)
+{
+    return Fleury4ParseCalcExpression_(arena, at_ptr, 1);
+}
+
+typedef struct CalcInterpretResult CalcInterpretResult;
+struct CalcInterpretResult
+{
+    int error;
+    double value;
+};
+
+static CalcInterpretResult
+Fleury4InterpretCalcExpression(CalcNode *root)
+{
+    CalcInterpretResult result = {0};
+    
+    if(root)
+    {
+    switch(root->type)
+    {
+        case CALC_NODE_TYPE_atom:
+        {
+            result.value = root->value;
+            break;
+        }
+        case CALC_NODE_TYPE_add:
+            {
+                CalcInterpretResult left_result = Fleury4InterpretCalcExpression(root->left);
+                CalcInterpretResult right_result = Fleury4InterpretCalcExpression(root->right);
+                if(left_result.error || right_result.error)
+                {
+                    result.error = 1;
+                    goto end_interpret;
+                }
+                result.value = left_result.value + right_result.value;
+            break;
+        }
+        case CALC_NODE_TYPE_subtract:
+        {
+                CalcInterpretResult left_result = Fleury4InterpretCalcExpression(root->left);
+                CalcInterpretResult right_result = Fleury4InterpretCalcExpression(root->right);
+                if(left_result.error || right_result.error)
+                {
+                    result.error = 1;
+                    goto end_interpret;
+                }
+                result.value = left_result.value - right_result.value;
+                break;
+        }
+        case CALC_NODE_TYPE_multiply:
+        {
+                CalcInterpretResult left_result = Fleury4InterpretCalcExpression(root->left);
+                CalcInterpretResult right_result = Fleury4InterpretCalcExpression(root->right);
+                if(left_result.error || right_result.error)
+                {
+                    result.error = 1;
+                    goto end_interpret;
+                }
+                result.value = left_result.value * right_result.value;
+            break;
+        }
+        case CALC_NODE_TYPE_divide:
+        {
+                CalcInterpretResult left_result = Fleury4InterpretCalcExpression(root->left);
+                CalcInterpretResult right_result = Fleury4InterpretCalcExpression(root->right);
+                if(left_result.error || right_result.error || right_result.value == 0)
+                {
+                    result.error = 1;
+                    goto end_interpret;
+                }
+                result.value = left_result.value / right_result.value;
+                break;
+        }
+        case CALC_NODE_TYPE_negate:
+        {
+                result = Fleury4InterpretCalcExpression(root->operand);
+                result.value = -result.value;
+            break;
+        }
+        default: break;
+    }
+    }
+    else
+    {
+        result.error = 1;
+    }
+    
+    end_interpret:;
+    return result;
+}
+
+static void
+Fleury4RenderCalcComments(Application_Links *app, Buffer_ID buffer, View_ID view,
+                             Text_Layout_ID text_layout_id)
+{
+    Token_Array token_array = get_token_array_from_buffer(app, buffer);
+    Range_i64 visible_range = text_layout_get_visible_range(app, text_layout_id);
+    Scratch_Block scratch(app);
+    
+    if(token_array.tokens != 0)
+    {
+        i64 first_index = token_index_from_pos(&token_array, visible_range.first);
+        Token_Iterator_Array it = token_iterator_index(0, &token_array, first_index);
+        
+        Token *token = 0;
+        for(;;)
+        {
+            token = token_it_read(&it);
+            
+            if(token->pos >= visible_range.one_past_last || !token || !token_it_inc_non_whitespace(&it))
+            {
+                break;
+            }
+            
+            if(token->kind == TokenBaseKind_Comment)
+            {
+                Rect_f32 comment_first_char_rect =
+                    text_layout_character_on_screen(app, text_layout_id, token->pos);
+                
+                Rect_f32 comment_last_char_rect =
+                    text_layout_character_on_screen(app, text_layout_id, token->pos + token->size - 1);
+                
+                Range_i64 token_range =
+                {
+                    token->pos,
+                    token->pos + (token->size > 1024
+                                  ? 1024
+                                  : token->size),
+                };
+                
+                u8 token_buffer[1024] = {0};
+                buffer_read_range(app, buffer, token_range, token_buffer);
+                
+                if(token_buffer[0] == '/' && token_buffer[1] == '/' && token_buffer[2] == 'c')
+                {
+                    char parse_buffer[2048];
+                    MemoryArena parse_arena = MemoryArenaInit(parse_buffer, sizeof(parse_buffer));
+                    char *at = (char *)token_buffer + 3;
+                    CalcNode *expr = Fleury4ParseCalcExpression(&parse_arena, &at);
+                     CalcInterpretResult result = Fleury4InterpretCalcExpression(expr);
+                    
+                    char result_buffer[256] = {0};
+                    String_Const_u8 result_string =
+                    {
+                        (u8 *)result_buffer,
+                    };
+                    
+                    if(result.error)
+                    {
+                        result_string.size = (u64)snprintf(result_buffer, sizeof(result_buffer), "= (syntax error)");
+                    }
+                    else
+                    {
+                        result_string.size = (u64)snprintf(result_buffer, sizeof(result_buffer), "= %f", result.value);
+                    }
+                    
+                    Vec2_f32 point =
+                    {
+                        comment_last_char_rect.x1 + 20,
+                        comment_first_char_rect.y0,
+                    };
+                    
+                    u32 color = finalize_color(defcolor_comment, 0);
+                    color &= 0x00ffffff;
+                    color |= 0x80000000;
+                    draw_string(app, get_face_id(app, buffer), result_string, point, color);
+                    
+                }
+                
+            }
+            
+        }
+        
+    }
+    
+}
+
+//~ NOTE(rjf): C/C++ Token Highlighting
 
 static ARGB_Color
 Fleury4GetCTokenColor(Token token)
@@ -1084,6 +1749,8 @@ Fleury4DrawCTokenColors(Application_Links *app, Text_Layout_ID text_layout_id, T
         }
     }
 }
+
+//~ NOTE(rjf): Buffer Render
 
 static void
 Fleury4RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id,
@@ -1188,6 +1855,12 @@ Fleury4RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id,
                             fcolor_id(defcolor_highlight_cursor_line));
     }
     
+    // NOTE(rjf): Special comments
+    {
+        Fleury4RenderDividerComments(app, buffer, view_id, text_layout_id);
+        Fleury4RenderCalcComments(app, buffer, view_id, text_layout_id);
+    }
+    
     // NOTE(allen): Cursor shape
     Face_Metrics metrics = get_face_metrics(app, face_id);
     f32 cursor_roundness = (metrics.normal_advance*0.5f)*0.9f;
@@ -1236,6 +1909,8 @@ Fleury4RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id,
     
     draw_set_clip(app, prev_clip);
 }
+
+//~ NOTE(rjf): Render hook
 
 static void
 Fleury4Render(Application_Links *app, Frame_Info frame_info, View_ID view_id)
@@ -1332,6 +2007,8 @@ animate_in_n_milliseconds(app, 1000);
     text_layout_free(app, text_layout_id);
     draw_set_clip(app, prev_clip);
 }
+
+//~ NOTE(rjf): Bindings
 
 static void
 Fleury4SetBindings(Mapping *mapping)
@@ -1502,6 +2179,8 @@ Fleury4SetBindings(Mapping *mapping)
     
 }
 
+//~ NOTE(rjf): Begin buffer hook
+
 BUFFER_HOOK_SIG(Fleury4BeginBuffer)
 {
     ProfileScope(app, "[Fleury] Begin Buffer");
@@ -1581,4 +2260,13 @@ BUFFER_HOOK_SIG(Fleury4BeginBuffer)
     
     // no meaning for return
     return(0);
+}
+
+
+//~ NOTE(rjf): Layout
+
+ static Layout_Item_List
+Fleury4Layout(Application_Links *app, Arena *arena, Buffer_ID buffer, Range_i64 range, Face_ID face, f32 width)
+{
+    return(layout_unwrapped__inner(app, arena, buffer, range, face, width, LayoutVirtualIndent_Off));
 }
