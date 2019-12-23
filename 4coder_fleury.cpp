@@ -4,8 +4,9 @@
 
 #pragma warning(disable : 4706)
 
-//c a = sin(pi/2); a
-//c a + 26
+//c     a = 5; a + 22
+//c     sin(pi/2)
+
 
 //~ NOTE(rjf): Hooks
 static i32  Fleury4BeginBuffer(Application_Links *app, Buffer_ID buffer_id);
