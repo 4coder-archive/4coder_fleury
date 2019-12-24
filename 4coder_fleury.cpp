@@ -26,8 +26,8 @@ plot(x, x^2, -sin(x), cos(4*x))
 
 
 
-*/
 
+*/
 
 //~ NOTE(rjf): Hooks
 static i32  Fleury4BeginBuffer(Application_Links *app, Buffer_ID buffer_id);
@@ -1276,9 +1276,17 @@ Fleury4BeginPlot2D(PlotData2D *plot)
     Rect_f32 plot_view = plot->plot_view;
 
     draw_string(plot->app, plot->face_id, plot->title, V2f32(rect.x0, rect.y0 - 20), fcolor_resolve(fcolor_id(defcolor_comment)));
-    draw_string(plot->app, plot->face_id, plot->x_axis, V2f32(rect.x0, rect.y1), fcolor_resolve(fcolor_id(defcolor_comment)));
+    
+    if(plot->x_axis.data)
+    {
+        draw_string(plot->app, plot->face_id, plot->x_axis, V2f32(rect.x0, rect.y1), fcolor_resolve(fcolor_id(defcolor_comment)));
+    }
+    
+    if(plot->y_axis.data)
+    {
     draw_string_oriented(plot->app, plot->face_id, fcolor_resolve(fcolor_id(defcolor_comment)), plot->y_axis,
-                         V2f32(rect.x0 - 20, rect.y0 + 5), 0, V2f32(0.f, 1.f));
+                             V2f32(rect.x0 - 20, rect.y0 + 5), 0, V2f32(0.f, 1.f));
+    }
 
      plot->last_clip = draw_set_clip(plot->app, rect);
     f32 rect_width = rect.x1 - rect.x0;
@@ -2440,15 +2448,33 @@ Fleury4InterpretCalcExpression(CalcInterpretContext *context, CalcNode *root)
                     {
                         if(is_y_axis)
                         {
+                            if(title_result.string_value)
+                            {
                             context->y_axis = title_result.string_value + 1;
                             context->y_axis_length = title_result.string_length - 2;
+                            }
+                            else
+                            {
+                                context->y_axis = 0;
+                                context->y_axis_length = 0;
+                            }
+                            
                             context->y_low = (f32)low_result.f64_value;
                             context->y_high = (f32)high_result.f64_value;
                         }
                         else
                         {
+                            if(title_result.string_value)
+                            {
                             context->x_axis = title_result.string_value + 1;
-                            context->x_axis_length = title_result.string_length - 2;
+                                context->x_axis_length = title_result.string_length - 2;
+                            }
+                            else
+                            {
+                                context->x_axis = 0;
+                                context->x_axis_length = 0;
+                            }
+                            
                             context->x_low = (f32)low_result.f64_value;
                             context->x_high = (f32)high_result.f64_value;
                         }
@@ -2828,18 +2854,14 @@ Fleury4RenderPlotComments(Application_Links *app, Buffer_ID buffer, View_ID view
                 
                 if(string_match(token_string, plot_comment_signifier))
                 {
+                    // float x_values[1024];
+                    // float y_values[1024];
                     
+                    // for(;;)
+                    // {
+                        
+                    // }
                     
-                    // NOTE(rjf): Render divider line.
-                    Rect_f32 rect =
-                    {
-                        comment_first_char_rect.x0,
-                        comment_first_char_rect.y0-2,
-                        10000,
-                        comment_first_char_rect.y0,
-                    };
-                    f32 roundness = 4.f;
-                    draw_rectangle(app, rect, roundness, fcolor_resolve(fcolor_id(defcolor_comment)));
                 }
                 
             }
