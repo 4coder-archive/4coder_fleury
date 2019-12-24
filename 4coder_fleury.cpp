@@ -4,9 +4,31 @@
 
 #pragma warning(disable : 4706)
 
-//c     a = 5; a + 22
-//c     sin(pi/2)
+/*c
 
+plot_title('Plotting Test #1')
+plot_xaxis('x')
+plot_yaxis('y')
+plot(-2*x^3 + 3*x^2, -x^2, -x, 2*x)
+
+plot_title('Plotting Test #2')
+plot_xaxis('j')
+plot_yaxis('i')
+plot(x, x^2, -sin(x), cos(4*x))
+
+
+
+
+
+
+
+
+
+
+
+
+
+*/
 
 //~ NOTE(rjf): Hooks
 static i32  Fleury4BeginBuffer(Application_Links *app, Buffer_ID buffer_id);
@@ -239,13 +261,13 @@ Fleury4GetCameraFromView(Application_Links *app, View_ID view)
     Buffer_Scroll scroll = view_get_buffer_scroll(app, view);
     Face_ID face = get_face_id(app, buffer);
     Face_Metrics metrics = get_face_metrics(app, face);
-    
+
     Vec2_f32 v =
     {
         scroll.position.pixel_shift.x,
         scroll.position.pixel_shift.y + scroll.position.line_number*metrics.line_height,
     };
-    
+
     return v;
 }
 
@@ -255,7 +277,7 @@ Fleury4SpawnPowerModeParticles(Application_Links *app, View_ID view)
     if(global_power_mode_enabled)
     {
         Vec2_f32 camera = Fleury4GetCameraFromView(app, view);
-        
+
         for(int i = 0; i < 60; ++i)
         {
             f32 movement_angle = RandomF32(-3.1415926535897f*3.f/2.f, 3.1415926535897f*1.f/3.f);
@@ -269,7 +291,7 @@ Fleury4SpawnPowerModeParticles(Application_Links *app, View_ID view)
                             RandomF32(1.5f, 8.f),
                             RandomF32(0.5f, 6.f));
         }
-        
+
         global_power_mode.screen_shake += RandomF32(6.f, 16.f);
     }
 }
@@ -279,15 +301,15 @@ Fleury4RenderPowerMode(Application_Links *app, View_ID view, Face_ID face, Frame
 {
     Buffer_Scroll buffer_scroll = view_get_buffer_scroll(app, view);
     Face_Metrics metrics = get_face_metrics(app, face);
-    
+
     if(global_power_mode.particle_count > 0)
     {
         animate_in_n_milliseconds(app, 0);
     }
-    
+
     f32 camera_x = buffer_scroll.position.pixel_shift.x;
     f32 camera_y = buffer_scroll.position.pixel_shift.y + buffer_scroll.position.line_number*metrics.line_height;
-    
+
     for(int i = 0; i < global_power_mode.particle_count;)
     {
         // NOTE(rjf): Update particle.
@@ -299,7 +321,7 @@ Fleury4RenderPowerMode(Application_Links *app, View_ID view, Face_ID face, Frame
             global_power_mode.particles[i].velocity_y += 10.f * frame_info.animation_dt;
             global_power_mode.particles[i].alpha -= 0.5f * frame_info.animation_dt;
         }
-        
+
         if(global_power_mode.particles[i].alpha <= 0.f)
         {
             global_power_mode.particles[i] = global_power_mode.particles[--global_power_mode.particle_count];
@@ -321,12 +343,12 @@ Fleury4RenderPowerMode(Application_Links *app, View_ID view, Face_ID face, Frame
                 color |= ((u32)(global_power_mode.particles[i].alpha * 60.f)) << 24;
                 draw_rectangle(app, rect, roundness, color);
             }
-            
+
             ++i;
         }
-        
+
     }
-    
+
 }
 
 //~ NOTE(rjf): Code Peek
@@ -360,14 +382,14 @@ Fleury4OpenCodePeek(Application_Links *app, String_Const_u8 base_needle,
                     String_Match_Flag must_have_flags, String_Match_Flag must_not_have_flags)
 {
     global_code_peek_match_count = 0;
-    
+
     global_code_peek_open_transition = 0.f;
-    
+
     Scratch_Block scratch(app);
     String_Const_u8_Array type_array = Fleury4MakeTypeSearchList(app, scratch, base_needle);
     String_Match_List matches = find_all_matches_all_buffers(app, scratch, type_array, must_have_flags, must_not_have_flags);
     string_match_list_filter_remove_buffer_predicate(app, &matches, buffer_has_name_with_star);
-    
+
     for(String_Match *match = matches.first; match; match = match->next)
     {
         global_code_peek_matches[global_code_peek_match_count++] = *match;
@@ -376,9 +398,9 @@ Fleury4OpenCodePeek(Application_Links *app, String_Const_u8 base_needle,
             break;
         }
     }
-    
+
     matches = find_all_matches_all_buffers(app, scratch, base_needle, must_have_flags, must_not_have_flags);
-    
+
     if(global_code_peek_match_count == 0)
     {
         for(String_Match *match = matches.first; match; match = match->next)
@@ -390,7 +412,7 @@ Fleury4OpenCodePeek(Application_Links *app, String_Const_u8 base_needle,
             }
         }
     }
-    
+
     if(global_code_peek_match_count > 0)
     {
         global_code_peek_selected_index = 0;
@@ -416,7 +438,7 @@ Fleury4NextCodePeek(void)
     {
         global_code_peek_selected_index = 0;
     }
-    
+
     if(global_code_peek_selected_index >= global_code_peek_match_count)
     {
         global_code_peek_selected_index = -1;
@@ -451,36 +473,36 @@ Fleury4RenderCodePeek(Application_Links *app, View_ID view_id, Face_ID face_id, 
        global_code_peek_selected_index < global_code_peek_match_count)
     {
         String_Match *match = &global_code_peek_matches[global_code_peek_selected_index];
-        
+
         global_code_peek_open_transition += (1.f - global_code_peek_open_transition) * frame_info.animation_dt * 14.f;
         if(fabs(global_code_peek_open_transition - 1.f) > 0.005f)
         {
             animate_in_n_milliseconds(app, 0);
         }
-        
+
         Rect_f32 rect = {0};
         rect.x0 = (float)((int)global_smooth_cursor_position.x + 16);
         rect.y0 = (float)((int)global_smooth_cursor_position.y + 16);
         rect.x1 = (float)((int)rect.x0 + 400);
         rect.y1 = (float)((int)rect.y0 + 600*global_code_peek_open_transition);
-        
+
         draw_rectangle(app, rect, 4.f, fcolor_resolve(fcolor_id(defcolor_back)));
         draw_rectangle_outline(app, rect, 4.f, 3.f, fcolor_resolve(fcolor_id(defcolor_pop2)));
-        
+
         if(rect.y1 - rect.y0 > 60.f)
         {
             rect.x0 += 30;
             rect.y0 += 30;
             rect.x1 -= 30;
             rect.y1 -= 30;
-            
+
             Buffer_Point buffer_point =
             {
                 get_line_number_from_pos(app, match->buffer, match->range.start),
                 0,
             };
             Text_Layout_ID text_layout_id = text_layout_create(app, match->buffer, rect, buffer_point);
-            
+
             Rect_f32 prev_clip = draw_set_clip(app, rect);
             {
                 Token_Array token_array = get_token_array_from_buffer(app, match->buffer);
@@ -493,7 +515,7 @@ Fleury4RenderCodePeek(Application_Links *app, View_ID view_id, Face_ID face_id, 
                     Range_i64 visible_range = match->range;
                     paint_text_color_fcolor(app, text_layout_id, visible_range, fcolor_id(defcolor_text_default));
                 }
-                
+
                 draw_text_layout_default(app, text_layout_id);
             }
             draw_set_clip(app, prev_clip);
@@ -504,7 +526,7 @@ Fleury4RenderCodePeek(Application_Links *app, View_ID view_id, Face_ID face_id, 
     {
         global_code_peek_open_transition = 0.f;
     }
-    
+
 }
 
 //~ NOTE(rjf): Commands
@@ -645,7 +667,7 @@ void
 custom_layer_init(Application_Links *app)
 {
     Thread_Context *tctx = get_thread_context(app);
-    
+
     // NOTE(allen): setup for default framework
     {
         async_task_handler_init(app, &global_async_system);
@@ -656,7 +678,7 @@ custom_layer_init(Application_Links *app)
         initialize_managed_id_metadata(app);
         set_default_color_scheme(app);
     }
-    
+
     // NOTE(allen): default hooks and command maps
     {
     set_all_default_hooks(app);
@@ -666,7 +688,7 @@ custom_layer_init(Application_Links *app)
     mapping_init(tctx, &framework_mapping);
     Fleury4SetBindings(&framework_mapping);
     }
-    
+
     Fleury4DarkMode(app);
 }
 
@@ -679,7 +701,7 @@ Fleury4LightMode(Application_Links *app)
     Arena *arena = &global_theme_arena;
     linalloc_clear(arena);
     *table = make_color_table(app, arena);
-    
+
     table->arrays[defcolor_bar]                   = make_colors(arena, 0xFFd9dfe2);
     table->arrays[defcolor_base]                  = make_colors(arena, 0xff806d56);
     table->arrays[defcolor_pop1]                  = make_colors(arena, 0xFF3C57DC);
@@ -727,7 +749,7 @@ Fleury4DarkMode(Application_Links *app)
     Arena *arena = &global_theme_arena;
     linalloc_clear(arena);
     *table = make_color_table(app, arena);
-    
+
     table->arrays[defcolor_bar]                   = make_colors(arena, 0xFF222425);
     table->arrays[defcolor_base]                  = make_colors(arena, 0xffb99468);
     table->arrays[defcolor_pop1]                  = make_colors(arena, 0xFF3C57DC);
@@ -776,33 +798,33 @@ Fleury4RenderCursor(Application_Links *app, View_ID view_id, b32 is_active_view,
                     f32 roundness, f32 outline_thickness, Frame_Info frame_info)
 {
     b32 has_highlight_range = draw_highlight_range(app, view_id, buffer, text_layout_id, roundness);
-    
+
     if(!has_highlight_range)
     {
         i64 cursor_pos = view_get_cursor_pos(app, view_id);
         i64 mark_pos = view_get_mark_pos(app, view_id);
         if (is_active_view)
         {
-            
+
             // NOTE(rjf): Draw cursor.
             {
                 static Rect_f32 rect = {0};
                 Rect_f32 target_rect = text_layout_character_on_screen(app, text_layout_id, cursor_pos);
                 Rect_f32 last_rect = rect;
-                
+
                 float x_change = target_rect.x0 - rect.x0;
                 float y_change = target_rect.y0 - rect.y0;
                 float cursor_size_x = (target_rect.x1 - target_rect.x0);
                 float cursor_size_y = (target_rect.y1 - target_rect.y0) * (1 + fabsf(y_change) / 60.f);
-                
+
                 rect.x0 += (x_change) * frame_info.animation_dt * 14.f;
                 rect.y0 += (y_change) * frame_info.animation_dt * 14.f;
                 rect.x1 = rect.x0 + cursor_size_x;
                 rect.y1 = rect.y0 + cursor_size_y;
-                
+
                 global_smooth_cursor_position.x = rect.x0;
                 global_smooth_cursor_position.y = rect.y0;
-                
+
                 if(target_rect.y0 > last_rect.y0)
                 {
                     if(rect.y0 < last_rect.y0)
@@ -817,14 +839,14 @@ Fleury4RenderCursor(Application_Links *app, View_ID view_id, b32 is_active_view,
                         rect.y1 = last_rect.y1;
                     }
                 }
-                
+
                 if(fabs(x_change) > 1.f || fabs(y_change) > 1.f)
                 {
                     animate_in_n_milliseconds(app, 0);
                 }
-                
+
                 FColor cursor_color = fcolor_id(defcolor_cursor);
-                
+
                 if(global_keyboard_macro_is_recording)
                 {
                     cursor_color = fcolor_argb(0xffde40df);
@@ -833,12 +855,12 @@ Fleury4RenderCursor(Application_Links *app, View_ID view_id, b32 is_active_view,
                 {
                     cursor_color = fcolor_argb(0xffefaf2f);
                 }
-                
+
                 // NOTE(rjf): Draw main cursor.
                 {
                     draw_rectangle(app, rect, roundness, fcolor_resolve(cursor_color));
                 }
-                
+
                 // NOTE(rjf): Draw cursor glow (because why the hell not).
                 for(int i = 0; i < 20; ++i)
                 {
@@ -857,9 +879,9 @@ Fleury4RenderCursor(Application_Links *app, View_ID view_id, b32 is_active_view,
                         break;
                     }
                 }
-                
+
             }
-            
+
             paint_text_color_pos(app, text_layout_id, cursor_pos,
                                  fcolor_id(defcolor_at_cursor));
             draw_character_wire_frame(app, text_layout_id, mark_pos,
@@ -874,9 +896,9 @@ Fleury4RenderCursor(Application_Links *app, View_ID view_id, b32 is_active_view,
             draw_character_wire_frame(app, text_layout_id, cursor_pos,
                                       roundness, outline_thickness,
                                       fcolor_id(defcolor_cursor));
-            
+
         }
-        
+
     }
 }
 
@@ -897,23 +919,23 @@ Fleury4RenderBraceHighlight(Application_Links *app, Buffer_ID buffer, Text_Layou
         }
         else
         {
-            
+
             if(token_it_dec_all(&it))
             {
                 token = token_it_read(&it);
-                
+
                 if (token->kind == TokenBaseKind_ScopeClose &&
                     pos == token->pos + token->size)
                 {
                     pos = token->pos;
                 }
-                
+
             }
-            
+
         }
-        
+
     }
-    
+
     draw_enclosures(app, text_layout_id, buffer,
                     pos, FindNest_Scope,
                     RangeHighlightKind_CharacterHighlight,
@@ -929,12 +951,12 @@ Fleury4RenderCloseBraceAnnotation(Application_Links *app, Buffer_ID buffer, Text
     Range_i64 visible_range = text_layout_get_visible_range(app, text_layout_id);
     Token_Array token_array = get_token_array_from_buffer(app, buffer);
     Face_ID face_id = get_face_id(app, buffer);
-    
+
     if(token_array.tokens != 0)
     {
         Token_Iterator_Array it = token_iterator_pos(0, &token_array, pos);
         Token *token = token_it_read(&it);
-        
+
         if(token != 0 && token->kind == TokenBaseKind_ScopeOpen)
         {
             pos = token->pos + token->size;
@@ -949,29 +971,29 @@ Fleury4RenderCloseBraceAnnotation(Application_Links *app, Buffer_ID buffer, Text
                 }
             }
         }
-    
+
     Scratch_Block scratch(app);
     Range_i64_Array ranges = get_enclosure_ranges(app, scratch, buffer, pos, RangeHighlightKind_CharacterHighlight);
-    
+
     for (i32 i = ranges.count - 1; i >= 0; i -= 1)
     {
         Range_i64 range = ranges.ranges[i];
-        
+
         if(range.start >= visible_range.start)
         {
             continue;
         }
-        
+
         Rect_f32 close_scope_rect = text_layout_character_on_screen(app, text_layout_id, range.end);
         Vec2_f32 close_scope_pos = { close_scope_rect.x0 + 12, close_scope_rect.y0 };
-        
+
         // NOTE(rjf): Find token set before this scope begins.
             Token *start_token = 0;
             i64 token_count = 0;
             {
             Token_Iterator_Array it = token_iterator_pos(0, &token_array, range.start-1);
             int paren_nest = 0;
-            
+
                 for(;;)
             {
                     Token *token = token_it_read(&it);
@@ -979,11 +1001,11 @@ Fleury4RenderCloseBraceAnnotation(Application_Links *app, Buffer_ID buffer, Text
                     {
                         break;
                 }
-                
+
                 if(token)
                 {
                     token_count += 1;
-                    
+
                     if(token->kind == TokenBaseKind_ParentheticalClose)
                     {
                         ++paren_nest;
@@ -1005,16 +1027,16 @@ Fleury4RenderCloseBraceAnnotation(Application_Links *app, Buffer_ID buffer, Text
                         start_token = token;
                         break;
                     }
-                    
+
                 }
                 else
                 {
                     break;
                 }
                 }
-                
+
             }
-        
+
         // NOTE(rjf): Draw.
         if(start_token)
             {
@@ -1022,7 +1044,7 @@ Fleury4RenderCloseBraceAnnotation(Application_Links *app, Buffer_ID buffer, Text
             close_scope_pos.x += 32;
             String_Const_u8 start_line = push_buffer_line(app, scratch, buffer,
                                                           get_line_number_from_pos(app, buffer, start_token->pos));
-            
+
             u64 first_non_whitespace_offset = 0;
             for(u64 c = 0; c < start_line.size; ++c)
             {
@@ -1037,16 +1059,16 @@ Fleury4RenderCloseBraceAnnotation(Application_Links *app, Buffer_ID buffer, Text
             }
             start_line.str += first_non_whitespace_offset;
             start_line.size -= first_non_whitespace_offset;
-            
+
             u32 color = finalize_color(defcolor_comment, 0);
             color &= 0x00ffffff;
             color |= 0x80000000;
             draw_string(app, face_id, start_line, close_scope_pos, color);
-            
+
             }
-            
+
     }
-    
+
 }
 
 //~ NOTE(rjf): Brace lines
@@ -1058,7 +1080,7 @@ Fleury4RenderBraceLines(Application_Links *app, Buffer_ID buffer, View_ID view,
     Face_ID face_id = get_face_id(app, buffer);
     Token_Array token_array = get_token_array_from_buffer(app, buffer);
     Range_i64 visible_range = text_layout_get_visible_range(app, text_layout_id);
-    
+
     if (token_array.tokens != 0)
     {
         Token_Iterator_Array it = token_iterator_pos(0, &token_array, pos);
@@ -1069,40 +1091,40 @@ Fleury4RenderBraceLines(Application_Links *app, Buffer_ID buffer, View_ID view,
         }
         else
         {
-            
+
             if(token_it_dec_all(&it))
             {
                 token = token_it_read(&it);
-                
+
                 if (token->kind == TokenBaseKind_ScopeClose &&
                     pos == token->pos + token->size)
                 {
                     pos = token->pos;
                 }
-                
+
             }
-            
+
         }
-        
+
     }
-    
+
     Face_Metrics metrics = get_face_metrics(app, face_id);
-    
+
     Scratch_Block scratch(app);
     Range_i64_Array ranges = get_enclosure_ranges(app, scratch, buffer, pos, RangeHighlightKind_CharacterHighlight);
     float x_position = view_get_screen_rect(app, view).x0 + 4 -
         view_get_buffer_scroll(app, view).position.pixel_shift.x;
-    
+
     for (i32 i = ranges.count - 1; i >= 0; i -= 1)
     {
         Range_i64 range = ranges.ranges[i];
-        
+
         Rect_f32 range_start_rect = text_layout_character_on_screen(app, text_layout_id, range.start);
         Rect_f32 range_end_rect = text_layout_character_on_screen(app, text_layout_id, range.end);
-        
+
         float y_start = 0;
         float y_end = 10000;
-        
+
         if(range.start >= visible_range.start)
         {
             y_start = range_start_rect.y0 + metrics.line_height;
@@ -1111,7 +1133,7 @@ Fleury4RenderBraceLines(Application_Links *app, Buffer_ID buffer, View_ID view,
         {
             y_end = range_end_rect.y0;
         }
-        
+
         Rect_f32 line_rect = {0};
         line_rect.x0 = x_position;
         line_rect.x1 = x_position+1;
@@ -1121,11 +1143,11 @@ Fleury4RenderBraceLines(Application_Links *app, Buffer_ID buffer, View_ID view,
         color &= 0x00ffffff;
         color |= 0x60000000;
         draw_rectangle(app, line_rect, 0.5f, color);
-        
+
         x_position += metrics.space_advance * 4;
-        
+
     }
-    
+
 }
 
 //~ NOTE(rjf): Range highlight
@@ -1141,7 +1163,7 @@ Fleury4RenderRangeHighlight(Application_Links *app, View_ID view_id, Text_Layout
     total_range_rect.y0 = MinimumF32(range_start_rect.y0, range_end_rect.y0);
     total_range_rect.x1 = MaximumF32(range_start_rect.x1, range_end_rect.x1);
     total_range_rect.y1 = MaximumF32(range_start_rect.y1, range_end_rect.y1);
-    
+
     ARGB_Color background_color = fcolor_resolve(fcolor_id(defcolor_pop2));
     float background_color_r = (float)((background_color & 0x00ff0000) >> 16) / 255.f;
     float background_color_g = (float)((background_color & 0x0000ff00) >>  8) / 255.f;
@@ -1171,16 +1193,16 @@ Fleury4RenderDividerComments(Application_Links *app, Buffer_ID buffer, View_ID v
     for(; divider_comment_signifier.str[divider_comment_signifier_length];
         ++divider_comment_signifier_length);
     divider_comment_signifier.size = divider_comment_signifier_length;
-    
+
     Token_Array token_array = get_token_array_from_buffer(app, buffer);
     Range_i64 visible_range = text_layout_get_visible_range(app, text_layout_id);
     Scratch_Block scratch(app);
-    
+
     if(token_array.tokens != 0)
     {
         i64 first_index = token_index_from_pos(&token_array, visible_range.first);
         Token_Iterator_Array it = token_iterator_index(0, &token_array, first_index);
-        
+
         Token *token = 0;
         for(;;)
         {
@@ -1195,7 +1217,7 @@ Fleury4RenderDividerComments(Application_Links *app, Buffer_ID buffer, View_ID v
             {
                 Rect_f32 comment_first_char_rect =
                     text_layout_character_on_screen(app, text_layout_id, token->pos);
-                
+
                 Range_i64 token_range =
                 {
                     token->pos,
@@ -1203,11 +1225,11 @@ Fleury4RenderDividerComments(Application_Links *app, Buffer_ID buffer, View_ID v
                                   ? divider_comment_signifier_length
                                   : token->size),
                 };
-                
+
                 u8 token_buffer[256] = {0};
                 buffer_read_range(app, buffer, token_range, token_buffer);
                 String_Const_u8 token_string = { token_buffer, (u64)(token_range.end - token_range.start) };
-                
+
                 if(string_match(token_string, divider_comment_signifier))
                 {
                     // NOTE(rjf): Render divider line.
@@ -1221,13 +1243,131 @@ Fleury4RenderDividerComments(Application_Links *app, Buffer_ID buffer, View_ID v
                     f32 roundness = 4.f;
                     draw_rectangle(app, rect, roundness, fcolor_resolve(fcolor_id(defcolor_comment)));
                 }
-                
+
             }
-            
+
         }
-        
+
     }
-    
+
+}
+
+
+//~ NOTE(rjf): Plotting Tools
+
+typedef struct PlotData2D PlotData2D;
+struct PlotData2D
+{
+    Application_Links *app;
+    Face_ID face_id;
+    String_Const_u8 title;
+    String_Const_u8 x_axis;
+    String_Const_u8 y_axis;
+    Rect_f32 screen_rect;
+    Rect_f32 plot_view;
+    int color_cycle_position;
+
+    // NOTE(rjf): Used internally.
+    Rect_f32 last_clip;
+};
+
+static void
+Fleury4BeginPlot2D(PlotData2D *plot)
+{
+    Rect_f32 rect = plot->screen_rect;
+    Rect_f32 plot_view = plot->plot_view;
+
+    draw_string(plot->app, plot->face_id, plot->title, V2f32(rect.x0, rect.y0 - 20), fcolor_resolve(fcolor_id(defcolor_comment)));
+    draw_string(plot->app, plot->face_id, plot->x_axis, V2f32(rect.x0, rect.y1), fcolor_resolve(fcolor_id(defcolor_comment)));
+    draw_string_oriented(plot->app, plot->face_id, fcolor_resolve(fcolor_id(defcolor_comment)), plot->y_axis,
+                         V2f32(rect.x0 - 20, rect.y0 + 5), 0, V2f32(0.f, 1.f));
+
+     plot->last_clip = draw_set_clip(plot->app, rect);
+    f32 rect_width = rect.x1 - rect.x0;
+    f32 rect_height = rect.y1 - rect.y0;
+    draw_rectangle(plot->app, rect, 4.f, fcolor_resolve(fcolor_id(defcolor_back)));
+    draw_rectangle_outline(plot->app, rect, 4.f, 3.f, fcolor_resolve(fcolor_id(defcolor_pop2)));
+
+    // NOTE(rjf): Draw grid lines.
+    {
+        ARGB_Color grid_line_color = fcolor_resolve(fcolor_id(defcolor_comment));
+        grid_line_color &= 0x00ffffff;
+        grid_line_color |= 0x91000000;
+
+        for(int x = (int)plot_view.x0; x < (int)plot_view.x1; ++x)
+        {
+            f32 point_x = rect_width * ((float)x - plot_view.x0) / (plot_view.x1 - plot_view.x0);
+            Rect_f32 line_rect =
+            {
+                rect.x0 + point_x,
+                rect.y0,
+                rect.x0 + point_x + 1,
+                rect.y1,
+            };
+            draw_rectangle(plot->app, line_rect, 1.f, grid_line_color);
+        }
+
+        for(int y = (int)plot_view.y0; y < (int)plot_view.y1; ++y)
+        {
+            f32 point_y = rect_height * ((float)y - plot_view.y0) / (plot_view.y1 - plot_view.y0);
+            Rect_f32 line_rect =
+            {
+                rect.x0,
+                rect.y0 + point_y,
+                rect.x1,
+                rect.y0 + point_y+1,
+            };
+            draw_rectangle(plot->app, line_rect, 1.f, grid_line_color);
+        }
+
+    }
+}
+
+static void
+Fleury4Plot2D(PlotData2D *plot, float *x_data, float *y_data, int data_count)
+{
+    Rect_f32 rect = plot->screen_rect;
+    Rect_f32 plot_view = plot->plot_view;
+
+    f32 rect_width = rect.x1 - rect.x0;
+    f32 rect_height = rect.y1 - rect.y0;
+
+    ARGB_Color function_color_cycle[] =
+    {
+        0xff03d3fc,
+        0xff22b80b,
+        0xfff0bb0c,
+        0xfff0500c,
+    };
+
+    // NOTE(rjf): Draw function samples.
+    {
+        ARGB_Color function_color =
+            function_color_cycle[(plot->color_cycle_position++) % ArrayCount(function_color_cycle)];
+
+        for(int i = 0; i < data_count; ++i)
+        {
+            f32 point_x = rect_width * (x_data[i] - plot->plot_view.x0) / (plot->plot_view.x1 - plot->plot_view.x0);
+            f32 point_y = rect_height - rect_height * (y_data[i] - plot->plot_view.y0) / (plot->plot_view.y1 - plot->plot_view.y0);
+
+            Rect_f32 point_rect =
+            {
+                plot->screen_rect.x0 + point_x - 1,
+                plot->screen_rect.y0 + point_y - 1,
+                plot->screen_rect.x0 + point_x + 1,
+                plot->screen_rect.y0 + point_y + 1,
+            };
+
+            draw_rectangle(plot->app, point_rect, 1.f, function_color);
+        }
+    }
+
+}
+
+static void
+Fleury4EndPlot2D(PlotData2D *plot)
+{
+    draw_set_clip(plot->app, plot->last_clip);
 }
 
 //~ NOTE(rjf): Calc Comments
@@ -1239,6 +1379,7 @@ enum CalcTokenType
     CALC_TOKEN_TYPE_identifier,
     CALC_TOKEN_TYPE_number,
     CALC_TOKEN_TYPE_symbol,
+    CALC_TOKEN_TYPE_string_constant,
 };
 
 typedef struct CalcToken CalcToken;
@@ -1253,7 +1394,7 @@ static CalcToken
 Fleury4GetNextCalcToken(char *buffer)
 {
     CalcToken token = {0};
-    
+
     if(buffer)
     {
     for(int i = 0; buffer[i]; ++i)
@@ -1286,17 +1427,27 @@ Fleury4GetNextCalcToken(char *buffer)
         {
             token.type = CALC_TOKEN_TYPE_symbol;
             token.string = buffer+i;
-            
+
             // NOTE(rjf): Assumes 1-length symbols. Might not always be true.
             int j = i+1;
             // for(j = i+1; buffer[j] && CharIsSymbol(buffer[j]); ++j);
-            
+
             token.string_length = j - i;
             break;
-        }
+            }
+            else if(buffer[i] == '"' || buffer[i] == '\'')
+            {
+                int starting_char = buffer[i];
+                token.type = CALC_TOKEN_TYPE_string_constant;
+                token.string = buffer+i;
+                int j;
+                for(j = i+1; buffer[j] && buffer[j] != starting_char; ++j);
+                token.string_length = j - i + 1;
+                break;
+            }
     }
     }
-    
+
     return token;
 }
 
@@ -1319,7 +1470,7 @@ static int
 Fleury4CalcTokenMatch(CalcToken token, char *str)
 {
     int match = 0;
-    
+
     if(token.string && token.string_length > 0 &&
        token.type != CALC_TOKEN_TYPE_invalid)
     {
@@ -1377,19 +1528,57 @@ Fleury4RequireCalcTokenType(char **at, CalcTokenType type, CalcToken *token_ptr)
     return result;
 }
 
+static int
+Fleury4RequireNewline(char **at)
+{
+    int result = 0;
+
+    CalcToken next_token = Fleury4PeekCalcToken(at);
+    char *newline = 0;
+    for(int i = 0; (*at)[i]; ++i)
+    {
+        if((*at)[i] == '\n')
+        {
+            newline = (*at)+i;
+            break;
+        }
+    }
+
+    if(newline)
+    {
+        if(next_token.string > newline)
+        {
+            result = 1;
+        }
+    }
+
+    return result;
+}
+
 typedef enum CalcNodeType CalcNodeType;
 enum CalcNodeType
 {
     CALC_NODE_TYPE_invalid,
-    CALC_NODE_TYPE_atom,
+    CALC_NODE_TYPE_number,
+    CALC_NODE_TYPE_string_constant,
     CALC_NODE_TYPE_identifier,
     CALC_NODE_TYPE_function_call,
     CALC_NODE_TYPE_add,
     CALC_NODE_TYPE_subtract,
     CALC_NODE_TYPE_multiply,
     CALC_NODE_TYPE_divide,
+    CALC_NODE_TYPE_raise_to_power,
     CALC_NODE_TYPE_negate,
     CALC_NODE_TYPE_assignment,
+};
+
+typedef enum CalcType CalcType;
+enum CalcType
+{
+    CALC_TYPE_error,
+    CALC_TYPE_none,
+    CALC_TYPE_number,
+    CALC_TYPE_string,
 };
 
 static int
@@ -1401,10 +1590,12 @@ Fleury4CalcOperatorPrecedence(CalcNodeType type)
         0,
         0,
         0,
+        0,
         1,
         1,
         2,
         2,
+        3,
         0,
         0,
     };
@@ -1443,19 +1634,25 @@ static CalcNode *
 Fleury4ParseCalcUnaryExpression(MemoryArena *arena, char **at_ptr)
 {
     CalcNode *expression = 0;
-    
+
     CalcToken token = Fleury4PeekCalcToken(at_ptr);
-    
-    if(token.type == CALC_TOKEN_TYPE_identifier)
+
+    if(Fleury4CalcTokenMatch(token, "-"))
     {
         Fleury4NextCalcToken(at_ptr);
-        
+        expression = AllocateCalcNode(arena, CALC_NODE_TYPE_negate);
+        expression->operand = Fleury4ParseCalcUnaryExpression(arena, at_ptr);
+    }
+    else if(token.type == CALC_TOKEN_TYPE_identifier)
+    {
+        Fleury4NextCalcToken(at_ptr);
+
         // NOTE(rjf): Function call.
         if(Fleury4RequireCalcToken(at_ptr, "("))
         {
             expression = AllocateCalcNode(arena, CALC_NODE_TYPE_function_call);
             expression->token = token;
-            
+
             CalcNode **target_param = &expression->first_parameter;
             for(;;)
             {
@@ -1465,21 +1662,29 @@ Fleury4ParseCalcUnaryExpression(MemoryArena *arena, char **at_ptr)
                 {
                     break;
                 }
-                
+
                 CalcNode *param = Fleury4ParseCalcExpression(arena, at_ptr);
+
+                if(param)
+                {
                 *target_param = param;
-                target_param = &(*target_param)->next;
-                
-                Fleury4RequireCalcToken(at_ptr, ",");
+                    target_param = &(*target_param)->next;
+                    Fleury4RequireCalcToken(at_ptr, ",");
+                }
+                else
+                {
+                    expression = 0;
+                    goto end_parse;
+                }
             }
-            
+
             if(!Fleury4RequireCalcToken(at_ptr, ")"))
             {
                 expression = 0;
                 goto end_parse;
             }
         }
-        
+
         // NOTE(rjf): Constant or variable.
         else
         {
@@ -1496,10 +1701,24 @@ Fleury4ParseCalcUnaryExpression(MemoryArena *arena, char **at_ptr)
     else if(token.type == CALC_TOKEN_TYPE_number)
     {
         Fleury4NextCalcToken(at_ptr);
-        expression = AllocateCalcNode(arena, CALC_NODE_TYPE_atom);
+        expression = AllocateCalcNode(arena, CALC_NODE_TYPE_number);
         expression->value = GetFirstDoubleFromBuffer(token.string);
     }
-    
+    else if(token.type == CALC_TOKEN_TYPE_string_constant)
+    {
+        Fleury4NextCalcToken(at_ptr);
+        expression = AllocateCalcNode(arena, CALC_NODE_TYPE_string_constant);
+        expression->token = token;
+    }
+
+    if(Fleury4RequireCalcToken(at_ptr, "^"))
+    {
+        CalcNode *old_expr = expression;
+        expression = AllocateCalcNode(arena, CALC_NODE_TYPE_raise_to_power);
+        expression->left = old_expr;
+        expression->right = Fleury4ParseCalcUnaryExpression(arena, at_ptr);
+    }
+
     end_parse:;
     return expression;
 }
@@ -1539,17 +1758,17 @@ static CalcNode *
 Fleury4ParseCalcExpression_(MemoryArena *arena, char **at_ptr, int precedence_in)
 {
     CalcNode *expression = Fleury4ParseCalcUnaryExpression(arena, at_ptr);
-    
+
     if(!expression)
     {
         goto end_parse;
     }
-    
+
     CalcToken token = Fleury4PeekCalcToken(at_ptr);
     CalcNodeType operator_type = Fleury4GetCalcBinaryOperatorTypeFromToken(token);
-    
+
     if(token.string && operator_type != CALC_NODE_TYPE_invalid &&
-       operator_type != CALC_NODE_TYPE_atom)
+       operator_type != CALC_NODE_TYPE_number)
     {
         for(int precedence = Fleury4CalcOperatorPrecedence(operator_type);
             precedence >= precedence_in;
@@ -1558,29 +1777,29 @@ Fleury4ParseCalcExpression_(MemoryArena *arena, char **at_ptr, int precedence_in
             for(;;)
             {
                 token = Fleury4PeekCalcToken(at_ptr);
-                
+
                 operator_type = Fleury4GetCalcBinaryOperatorTypeFromToken(token);
                 int operator_precedence = Fleury4CalcOperatorPrecedence(operator_type);
-                
+
                 if(operator_precedence != precedence)
                 {
                     break;
                 }
-                
+
                 if(operator_type == CALC_NODE_TYPE_invalid)
                 {
                     break;
                 }
-                
+
                 Fleury4NextCalcToken(at_ptr);
-                
+
                  CalcNode *right = Fleury4ParseCalcExpression_(arena, at_ptr, precedence+1);
                 CalcNode *existing_expression = expression;
                 expression = AllocateCalcNode(arena, operator_type);
                 expression->type = operator_type;
                 expression->left = existing_expression;
                 expression->right = right;
-                
+
                 if(!right)
                 {
                     goto end_parse;
@@ -1588,7 +1807,7 @@ Fleury4ParseCalcExpression_(MemoryArena *arena, char **at_ptr, int precedence_in
             }
         }
     }
-    
+
     end_parse:;
     return expression;
 }
@@ -1604,31 +1823,32 @@ Fleury4ParseCalcCode(MemoryArena *arena, char **at_ptr)
 {
     CalcNode *root = 0;
     CalcNode **target = &root;
-    
+
     for(;;)
     {
         CalcToken token = Fleury4PeekCalcToken(at_ptr);
-        
+
         // NOTE(rjf): Parse assignment.
         if(token.type == CALC_TOKEN_TYPE_identifier)
         {
             char *at_reset = *at_ptr;
             Fleury4NextCalcToken(at_ptr);
-            
+
+            // NOTE(rjf): Variable assignment
             if(Fleury4RequireCalcToken(at_ptr, "="))
             {
                 CalcNode *identifier = AllocateCalcNode(arena, CALC_NODE_TYPE_identifier);
                 identifier->token = token;
-                
+
                 CalcNode *assignment = AllocateCalcNode(arena, CALC_NODE_TYPE_assignment);
                 assignment->left = identifier;
                 assignment->right = Fleury4ParseCalcExpression(arena, at_ptr);
-                
+
                 if(assignment == 0)
                 {
                     break;
                 }
-                
+
                 *target = assignment;
                 target = &(*target)->next;
                 goto end_parse;
@@ -1638,7 +1858,7 @@ Fleury4ParseCalcCode(MemoryArena *arena, char **at_ptr)
                 *at_ptr = at_reset;
             }
         }
-        
+
         // NOTE(rjf): Parse expression.
         {
             CalcNode *expression = Fleury4ParseCalcExpression(arena, at_ptr);
@@ -1650,24 +1870,17 @@ Fleury4ParseCalcCode(MemoryArena *arena, char **at_ptr)
             target = &(*target)->next;
             goto end_parse;
         }
-        
+
         end_parse:;
-        
-        if(!Fleury4RequireCalcToken(at_ptr, ";") && !Fleury4RequireCalcToken(at_ptr, "\n"))
+
+        if(!Fleury4RequireCalcToken(at_ptr, ";") && !Fleury4RequireNewline(at_ptr))
         {
             break;
         }
     }
-    
+
     return root;
 }
-
-typedef struct CalcInterpretResult CalcInterpretResult;
-struct CalcInterpretResult
-{
-    int error;
-    double value;
-};
 
 typedef struct CalcSymbolKey CalcSymbolKey;
 struct CalcSymbolKey
@@ -1690,6 +1903,45 @@ struct CalcSymbolTable
     CalcSymbolValue *values;
 };
 
+typedef struct CalcInterpretGraph CalcInterpretGraph;
+struct CalcInterpretGraph
+{
+    CalcNode *graph_expression;
+    CalcNode *input_value;
+    CalcNode *parent_call;
+    char *plot_title;
+    int plot_title_length;
+    char *x_axis;
+    int x_axis_length;
+    char *y_axis;
+    int y_axis_length;
+    CalcInterpretGraph *next;
+};
+
+typedef struct CalcInterpretResult CalcInterpretResult;
+struct CalcInterpretResult
+{
+    CalcType type;
+    char *error;
+    double f64_value;
+    char *string_value;
+    int string_length;
+    CalcInterpretGraph *first_graph;
+};
+
+typedef struct CalcInterpretContext CalcInterpretContext;
+struct CalcInterpretContext
+{
+    MemoryArena *arena;
+    CalcSymbolTable *symbol_table;
+    char *plot_title;
+    int plot_title_length;
+    char *x_axis;
+    int x_axis_length;
+    char *y_axis;
+    int y_axis_length;
+};
+
 static CalcSymbolTable
 CalcSymbolTableInit(MemoryArena *arena, unsigned int size)
 {
@@ -1702,16 +1954,16 @@ CalcSymbolTableInit(MemoryArena *arena, unsigned int size)
     return table;
 }
 
-static CalcNode *
-CalcSymbolTableLookup(CalcSymbolTable *table, char *string, int length)
+static CalcSymbolValue *
+CalcSymbolTableLookup_(CalcSymbolTable *table, char *string, int length)
 {
-    CalcNode *result = 0;
-    
+    CalcSymbolValue *result = 0;
+
     unsigned int hash = StringCRC32(string, length) % table->size;
     unsigned int original_hash = hash;
-    
+
     CalcSymbolValue *value = 0;
-    
+
     for(;;)
     {
         if(table->keys[hash].string)
@@ -1739,12 +1991,24 @@ CalcSymbolTableLookup(CalcSymbolTable *table, char *string, int length)
             break;
         }
     }
-    
+
     if(value)
+    {
+        result = value;
+    }
+
+    return result;
+}
+
+static CalcNode *
+CalcSymbolTableLookup(CalcSymbolTable *table, char *string, int string_length)
+{
+    CalcNode *result = 0;
+    CalcSymbolValue *value = CalcSymbolTableLookup_(table, string, string_length);
+        if(value)
     {
         result = value->node;
     }
-    
     return result;
 }
 
@@ -1754,7 +2018,7 @@ CalcSymbolTableAdd(CalcSymbolTable *table, char *string, int string_length, Calc
     unsigned int hash = StringCRC32(string, string_length) % table->size;
     unsigned int original_hash = hash;
     int found = 0;
-    
+
     for(;;)
     {
         if(table->keys[hash].string)
@@ -1783,7 +2047,7 @@ CalcSymbolTableAdd(CalcSymbolTable *table, char *string, int string_length, Calc
             break;
         }
     }
-    
+
     if(found)
     {
         table->keys[hash].string = string;
@@ -1793,194 +2057,530 @@ CalcSymbolTableAdd(CalcSymbolTable *table, char *string, int string_length, Calc
 }
 
 static CalcInterpretResult
-Fleury4InterpretCalcExpression_(CalcSymbolTable *symbol_table, CalcNode *root)
+Fleury4InterpretCalcExpression(CalcInterpretContext *context, CalcNode *root);
+
+static void
+Fleury4GraphCalcExpression(Application_Links *app, Face_ID face_id,
+                           Rect_f32 rect, CalcInterpretGraph *first_graph,
+                           CalcInterpretContext *context)
+{
+    CalcNode *parent_call = first_graph->parent_call;
+    Rect_f32 plot_view =
+    {
+        -2,
+        -2,
+        +2,
+        +2,
+    };
+
+    PlotData2D plot_data = {0};
+    {
+        plot_data.app = app;
+        plot_data.face_id = face_id;
+        plot_data.title  = { first_graph->plot_title, (u64)first_graph->plot_title_length };
+        plot_data.x_axis = { first_graph->x_axis, (u64)first_graph->x_axis_length };
+        plot_data.y_axis = { first_graph->y_axis, (u64)first_graph->y_axis_length };
+        plot_data.screen_rect = rect;
+        plot_data.plot_view = plot_view;
+    }
+    Fleury4BeginPlot2D(&plot_data);
+
+    for(CalcInterpretGraph *graph = first_graph; graph && graph->parent_call == parent_call;
+        graph = graph->next)
+    {
+    CalcNode *expression = graph->graph_expression;
+     CalcNode *value = graph->input_value;
+    CalcNode value_node = {0};
+    {
+        value_node.type = CALC_NODE_TYPE_number;
+    }
+
+    if(value)
+    {
+            CalcSymbolTableAdd(context->symbol_table, value->token.string,
+                               value->token.string_length, &value_node);
+    }
+
+    // NOTE(rjf): Find function sample points.
+    int values_to_plot = 256;
+    float x_values[256];
+    float y_values[256];
+    {
+    for(int i = 0; i < values_to_plot; ++i)
+    {
+        value_node.value = plot_view.x0 + (i / 256.f) * (plot_view.x1 - plot_view.x0);
+        CalcInterpretResult result = Fleury4InterpretCalcExpression(context, expression);
+        if(result.type != CALC_TYPE_number)
+        {
+            goto end_graph;
+        }
+        else
+        {
+            x_values[i] = (float)value_node.value;
+            y_values[i] = (float)result.f64_value;
+        }
+    }
+    }
+
+        Fleury4Plot2D(&plot_data, x_values, y_values, values_to_plot);
+
+    end_graph:;
+    }
+
+    Fleury4EndPlot2D(&plot_data);
+}
+
+typedef struct CalcFindInputResult CalcFindInputResult;
+struct CalcFindInputResult
+{
+    CalcNode *unknown;
+    int number_unknowns;
+};
+
+static CalcFindInputResult
+Fleury4FindUnknownForGraph(CalcSymbolTable *table, CalcNode *expression)
+{
+    CalcFindInputResult result = {0};
+
+    if(expression && expression->type != CALC_NODE_TYPE_invalid)
+    {
+        if(expression->type == CALC_NODE_TYPE_identifier)
+        {
+            CalcSymbolValue *symbol_value =
+                CalcSymbolTableLookup_(table, expression->token.string,
+                                                                   expression->token.string_length);
+
+            if(!symbol_value)
+            {
+            result.unknown = expression;
+                ++result.number_unknowns;
+            }
+        }
+        else
+        {
+            CalcFindInputResult results[] =
+            {
+                Fleury4FindUnknownForGraph(table, expression->left),
+                Fleury4FindUnknownForGraph(table, expression->right),
+                Fleury4FindUnknownForGraph(table, expression->first_parameter),
+                Fleury4FindUnknownForGraph(table, expression->next),
+            };
+
+            for(int i = 0; i < ArrayCount(results); ++i)
+            {
+                if(results[i].unknown)
+                {
+                if(!result.unknown)
+                {
+                    result.unknown = results[i].unknown;
+                    ++result.number_unknowns;
+                }
+                else
+                {
+                    if(!StringMatchCaseSensitive(results[i].unknown->token.string, results[i].unknown->token.string_length,
+                                                 result.unknown->token.string, result.unknown->token.string_length))
+                    {
+                        ++result.number_unknowns;
+                    }
+                }
+            }
+            }
+        }
+    }
+
+    return result;
+}
+
+static CalcInterpretResult
+Fleury4InterpretCalcExpression(CalcInterpretContext *context, CalcNode *root)
 {
     CalcInterpretResult result = {0};
-    
+
     if(root)
     {
         switch(root->type)
         {
-            case CALC_NODE_TYPE_atom:
+            case CALC_NODE_TYPE_number:
             {
-                result.value = root->value;
+                result.type = CALC_TYPE_number;
+                result.f64_value = root->value;
                 break;
             }
+
+            case CALC_NODE_TYPE_string_constant:
+            {
+                result.type = CALC_TYPE_string;
+                result.string_value = root->token.string;
+                result.string_length = root->token.string_length;
+                break;
+            }
+
             case CALC_NODE_TYPE_add:
-            {
-                CalcInterpretResult left_result = Fleury4InterpretCalcExpression_(symbol_table, root->left);
-                CalcInterpretResult right_result = Fleury4InterpretCalcExpression_(symbol_table, root->right);
-                if(left_result.error || right_result.error)
-                {
-                    result.error = 1;
-                    goto end_interpret;
-                }
-                result.value = left_result.value + right_result.value;
-                break;
-            }
             case CALC_NODE_TYPE_subtract:
-            {
-                CalcInterpretResult left_result = Fleury4InterpretCalcExpression_(symbol_table, root->left);
-                CalcInterpretResult right_result = Fleury4InterpretCalcExpression_(symbol_table, root->right);
-                if(left_result.error || right_result.error)
-                {
-                    result.error = 1;
-                    goto end_interpret;
-                }
-                result.value = left_result.value - right_result.value;
-                break;
-            }
             case CALC_NODE_TYPE_multiply:
+            case CALC_NODE_TYPE_divide:
+            case CALC_NODE_TYPE_raise_to_power:
             {
-                CalcInterpretResult left_result = Fleury4InterpretCalcExpression_(symbol_table, root->left);
-                CalcInterpretResult right_result = Fleury4InterpretCalcExpression_(symbol_table, root->right);
+                CalcInterpretResult left_result = Fleury4InterpretCalcExpression(context, root->left);
+                CalcInterpretResult right_result = Fleury4InterpretCalcExpression(context, root->right);
                 if(left_result.error || right_result.error)
                 {
-                    result.error = 1;
+                    result.type = CALC_TYPE_error;
+                    result.error = left_result.error ? left_result.error : right_result.error;
                     goto end_interpret;
                 }
-                result.value = left_result.value * right_result.value;
-                break;
-            }
-            case CALC_NODE_TYPE_divide:
-            {
-                CalcInterpretResult left_result = Fleury4InterpretCalcExpression_(symbol_table, root->left);
-                CalcInterpretResult right_result = Fleury4InterpretCalcExpression_(symbol_table, root->right);
-                if(left_result.error || right_result.error || right_result.value == 0)
+
+                else if(left_result.type != CALC_TYPE_number ||
+                        right_result.type != CALC_TYPE_number)
                 {
-                    result.error = 1;
+                    result.type = CALC_TYPE_error;
+                    result.error = "Cannot use non-numbers in expressions.";
                     goto end_interpret;
                 }
-                result.value = left_result.value / right_result.value;
+
+                switch(root->type)
+                {
+                    case CALC_NODE_TYPE_add:            result.f64_value = left_result.f64_value + right_result.f64_value; break;
+                    case CALC_NODE_TYPE_subtract:       result.f64_value = left_result.f64_value - right_result.f64_value; break;
+                    case CALC_NODE_TYPE_multiply:       result.f64_value = left_result.f64_value * right_result.f64_value; break;
+                    case CALC_NODE_TYPE_divide:
+                    {
+                        if(right_result.f64_value == 0)
+                        {
+                            result.type = CALC_TYPE_error;
+                            result.error = "Division by zero.";
+                        }
+                        else
+                        {
+                            result.f64_value = left_result.f64_value / right_result.f64_value;
+                        }
+                        break;
+                    }
+                    case CALC_NODE_TYPE_raise_to_power:
+                    {
+                        result.f64_value = pow(left_result.f64_value, right_result.f64_value);
+                        break;
+                    }
+                }
+
+                result.type = CALC_TYPE_number;
+
                 break;
             }
+
             case CALC_NODE_TYPE_negate:
             {
-                result = Fleury4InterpretCalcExpression_(symbol_table, root->operand);
-                result.value = -result.value;
+                result = Fleury4InterpretCalcExpression(context, root->operand);
+                result.f64_value = -result.f64_value;
                 break;
             }
+
             case CALC_NODE_TYPE_function_call:
             {
-                // NOTE(rjf): Built-in functions.
+
+                //~ NOTE(rjf): Built-in functions.
+
                 if(Fleury4CalcTokenMatch(root->token, "sin"))
                 {
-                    CalcInterpretResult arg = Fleury4InterpretCalcExpression_(symbol_table, root->first_parameter);
+                    CalcInterpretResult arg = Fleury4InterpretCalcExpression(context, root->first_parameter);
                     if(arg.error)
                     {
-                        result.error = 1;
+                        result.type = CALC_TYPE_error;
+                        result.error = arg.error;
                     }
                     else
                     {
-                        result.value = sin(arg.value);
+                        result.type = CALC_TYPE_number;
+                        result.f64_value = sin(arg.f64_value);
                     }
                 }
+
                 else if(Fleury4CalcTokenMatch(root->token, "cos"))
                 {
-                    CalcInterpretResult arg = Fleury4InterpretCalcExpression_(symbol_table, root->first_parameter);
+                    CalcInterpretResult arg = Fleury4InterpretCalcExpression(context, root->first_parameter);
                     if(arg.error)
                     {
-                        result.error = 1;
+                        result.type = CALC_TYPE_error;
+                        result.error = arg.error;
                     }
                     else
                     {
-                        result.value = cos(arg.value);
+                        result.type = CALC_TYPE_number;
+                        result.f64_value = cos(arg.f64_value);
                     }
-                }
+                    }
+
                 else if(Fleury4CalcTokenMatch(root->token, "tan"))
                 {
-                    CalcInterpretResult arg = Fleury4InterpretCalcExpression_(symbol_table, root->first_parameter);
+                    CalcInterpretResult arg = Fleury4InterpretCalcExpression(context, root->first_parameter);
                     if(arg.error)
                     {
-                        result.error = 1;
+                        result.type = CALC_TYPE_error;
+                        result.error = arg.error;
                     }
                     else
                     {
-                        result.value = tan(arg.value);
+                        result.type = CALC_TYPE_number;
+                        result.f64_value = tan(arg.f64_value);
                     }
                 }
+
                 else if(Fleury4CalcTokenMatch(root->token, "abs"))
                 {
-                    CalcInterpretResult arg = Fleury4InterpretCalcExpression_(symbol_table, root->first_parameter);
+                    CalcInterpretResult arg = Fleury4InterpretCalcExpression(context, root->first_parameter);
                     if(arg.error)
                     {
-                        result.error = 1;
+                        result.type = CALC_TYPE_error;
+                        result.error = arg.error;
                     }
                     else
                     {
-                        result.value = fabs(arg.value);
+                        result.type = CALC_TYPE_number;
+                        result.f64_value = fabs(arg.f64_value);
                     }
                 }
-                
-                // TODO(rjf): Non-built-in functions.
+
+                //~ NOTE(rjf): Plots.
+
+                else if(Fleury4CalcTokenMatch(root->token, "plot_title"))
+                {
+                    result.type = CALC_TYPE_none;
+
+                    if(root->first_parameter)
+                    {
+                        CalcInterpretResult title = Fleury4InterpretCalcExpression(context, root->first_parameter);
+
+                        if(title.type == CALC_TYPE_string)
+                        {
+                            context->plot_title = title.string_value + 1;
+                            context->plot_title_length = title.string_length - 2;
+                        }
+                        else
+                        {
+                            result.type = CALC_TYPE_error;
+                            result.error = "plot_title expects a string.";
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        result.type = CALC_TYPE_error;
+                        result.error = "plot_title expects a string.";
+                        break;
+                    }
+                }
+
+                else if(Fleury4CalcTokenMatch(root->token, "plot_xaxis"))
+                {
+                    result.type = CALC_TYPE_none;
+
+                    if(root->first_parameter)
+                    {
+                        CalcInterpretResult label = Fleury4InterpretCalcExpression(context, root->first_parameter);
+
+                        if(label.type == CALC_TYPE_string)
+                        {
+                            context->x_axis = label.string_value + 1;
+                            context->x_axis_length = label.string_length - 2;
+                        }
+                        else
+                        {
+                            result.type = CALC_TYPE_error;
+                            result.error = "plot_xaxis expects a string.";
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        result.type = CALC_TYPE_error;
+                        result.error = "plot_xaxis expects a string.";
+                        break;
+                    }
+                }
+
+                else if(Fleury4CalcTokenMatch(root->token, "plot_yaxis"))
+                {
+                    result.type = CALC_TYPE_none;
+
+                    if(root->first_parameter)
+                    {
+                        CalcInterpretResult label = Fleury4InterpretCalcExpression(context, root->first_parameter);
+
+                        if(label.type == CALC_TYPE_string)
+                        {
+                            context->y_axis = label.string_value + 1;
+                            context->y_axis_length = label.string_length - 2;
+                        }
+                        else
+                        {
+                            result.type = CALC_TYPE_error;
+                            result.error = "plot_yaxis expects a string.";
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        result.type = CALC_TYPE_error;
+                        result.error = "plot_yaxis expects a string.";
+                        break;
+                    }
+                }
+
+                else if(Fleury4CalcTokenMatch(root->token, "plot"))
+                {
+                    result.type = CALC_TYPE_none;
+
+                    CalcInterpretGraph **target = &result.first_graph;
+                    for(CalcNode *graph_expression = root->first_parameter;
+                        graph_expression; graph_expression = graph_expression->next)
+                    {
+                        CalcFindInputResult input_find = Fleury4FindUnknownForGraph(context->symbol_table,
+                                                                                    graph_expression);
+                    if(input_find.number_unknowns <= 1)
+                    {
+                         CalcNode *input_variable = input_find.unknown;
+                        CalcInterpretGraph *new_graph =
+                            (CalcInterpretGraph *)MemoryArenaAllocate(context->arena, sizeof(*new_graph));
+                        new_graph->graph_expression = graph_expression;
+                        new_graph->input_value = input_variable;
+                        new_graph->next = 0;
+                            new_graph->parent_call = root;
+                            new_graph->plot_title = context->plot_title;
+                            new_graph->plot_title_length = context->plot_title_length;
+                            new_graph->x_axis = context->x_axis;
+                            new_graph->x_axis_length = context->x_axis_length;
+                            new_graph->y_axis = context->y_axis;
+                            new_graph->y_axis_length = context->y_axis_length;
+                            *target = new_graph;
+                            target = &(*target)->next;
+                    }
+                    else
+                        {
+                            result.type = CALC_TYPE_error;
+                            result.error = "Too many unknowns in graphing expression.";
+                            break;
+                        }
+                    }
+                }
+
+                // NOTE(rjf): Non-built-in functions.
                 else
                 {
-                    
+                    result.type = CALC_TYPE_error;
+                    result.error = "Unrecognized function.";
                 }
-                
+
                 break;
             }
-            
+
             case CALC_NODE_TYPE_identifier:
             {
                 if(Fleury4CalcTokenMatch(root->token, "e"))
                 {
-                    result.value = 2.71828f;
+                    result.type = CALC_TYPE_number;
+                    result.f64_value = 2.71828f;
                 }
                 else if(Fleury4CalcTokenMatch(root->token, "pi"))
                 {
-                    result.value = 3.1415926f;
+                    result.type = CALC_TYPE_number;
+                    result.f64_value = 3.1415926f;
                 }
                 else
                 {
-                    CalcNode *value = CalcSymbolTableLookup(symbol_table, root->token.string, root->token.string_length);
-                    result = Fleury4InterpretCalcExpression_(symbol_table, value);
+                    CalcNode *value = CalcSymbolTableLookup(context->symbol_table, root->token.string, root->token.string_length);
+                    result = Fleury4InterpretCalcExpression(context, value);
                 }
-                
+
                 break;
             }
-            
+
             default: break;
         }
     }
     else
     {
-        result.error = 1;
+        result.error = "";
     }
-    
+
     end_interpret:;
     return result;
 }
 
+static int
+Fleury4IdentifierExistsInCalcExpression(CalcNode *root, char *string, int string_length)
+{
+    int result = 0;
+
+    if(root && root->type != CALC_NODE_TYPE_invalid)
+    {
+        if(StringMatchCaseSensitive(root->token.string, root->token.string_length, string, string_length))
+        {
+            result = 1;
+        }
+        else
+        {
+        result |= Fleury4IdentifierExistsInCalcExpression(root->left, string, string_length);
+            result |= Fleury4IdentifierExistsInCalcExpression(root->right, string, string_length);
+            result |= Fleury4IdentifierExistsInCalcExpression(root->first_parameter, string, string_length);
+            result |= Fleury4IdentifierExistsInCalcExpression(root->next, string, string_length);
+    }
+    }
+
+    return result;
+}
+
 static CalcInterpretResult
-Fleury4InterpretCalcExpression(CalcSymbolTable *symbol_table, CalcNode *tree_root)
+Fleury4InterpretCalcCode(CalcInterpretContext *context, CalcNode *tree_root)
 {
     CalcInterpretResult result = {0};
-    
+    CalcInterpretResult last_result = result;
+
     for(CalcNode *root = tree_root; root; root = root->next)
     {
         if(root->type == CALC_NODE_TYPE_assignment)
         {
             if(root->left->type == CALC_NODE_TYPE_identifier)
             {
-                CalcSymbolTableAdd(symbol_table, root->left->token.string, root->left->token.string_length,
-                                   root->right);
+                if(!Fleury4IdentifierExistsInCalcExpression(root->right, root->left->token.string, root->left->token.string_length))
+                {
+                    CalcSymbolTableAdd(context->symbol_table, root->left->token.string,
+                                       root->left->token.string_length, root->right);
+                    result = Fleury4InterpretCalcExpression(context, root->right);
+                }
+                else
+                {
+                    result.error = "Recursive definition.";
+                }
             }
             else
             {
-                result.error = 1;
+                result.error = "Assignment to non-identifier.";
             }
         }
         else
         {
-            result = Fleury4InterpretCalcExpression_(symbol_table, root);
-            if(result.error)
+            last_result = result;
+            result = Fleury4InterpretCalcExpression(context, root);
+            if(last_result.first_graph)
+            {
+                for(CalcInterpretGraph *graph = last_result.first_graph; graph; graph = graph->next)
+                {
+                    if(graph->next == 0)
+                    {
+                        graph->next = result.first_graph;
+                        break;
+                    }
+                }
+
+                result.first_graph = last_result.first_graph;
+            }
+            else if(result.error)
             {
                 break;
             }
         }
     }
-    
+
     return result;
 }
 
@@ -1991,34 +2591,39 @@ Fleury4RenderCalcComments(Application_Links *app, Buffer_ID buffer, View_ID view
     Token_Array token_array = get_token_array_from_buffer(app, buffer);
     Range_i64 visible_range = text_layout_get_visible_range(app, text_layout_id);
     Scratch_Block scratch(app);
-    
+
     if(token_array.tokens != 0)
     {
         static char arena_buffer[64*1024*1024];
         MemoryArena arena = MemoryArenaInit(arena_buffer, sizeof(arena_buffer));
         CalcSymbolTable symbol_table = CalcSymbolTableInit(&arena, 1024);
-        
+
+        CalcInterpretContext context_ = {0};
+        CalcInterpretContext *context = &context_;
+        context->arena = &arena;
+        context->symbol_table = &symbol_table;
+
         i64 first_index = token_index_from_pos(&token_array, visible_range.first);
         Token_Iterator_Array it = token_iterator_index(0, &token_array, first_index);
-        
+
         Token *token = 0;
         for(;;)
         {
             token = token_it_read(&it);
-            
+
             if(token->pos >= visible_range.one_past_last || !token || !token_it_inc_non_whitespace(&it))
             {
                 break;
             }
-            
+
             if(token->kind == TokenBaseKind_Comment)
             {
                 Rect_f32 comment_first_char_rect =
                     text_layout_character_on_screen(app, text_layout_id, token->pos);
-                
+
                 Rect_f32 comment_last_char_rect =
                     text_layout_character_on_screen(app, text_layout_id, token->pos + token->size - 1);
-                
+
                 Range_i64 token_range =
                 {
                     token->pos,
@@ -2026,7 +2631,7 @@ Fleury4RenderCalcComments(Application_Links *app, Buffer_ID buffer, View_ID view
                                   ? 1024
                                   : token->size),
                 };
-                
+
                 u32 token_buffer_size = (u32)(token_range.end - token_range.start);
                 if(token_buffer_size < 4)
                 {
@@ -2035,49 +2640,103 @@ Fleury4RenderCalcComments(Application_Links *app, Buffer_ID buffer, View_ID view
                 u8 *token_buffer = (u8 *)MemoryArenaAllocate(&arena, token_buffer_size+1);
                 buffer_read_range(app, buffer, token_range, token_buffer);
                 token_buffer[token_buffer_size] = 0;
-                
-                if(token_buffer[0] == '/' &&
-                   (token_buffer[1] == '/' || token_buffer[1] == '*') &&
-                   token_buffer[2] == 'c' && token_buffer[3] == ' ')
+
+                    if((token_buffer[0] == '/' && token_buffer[1] == '/' && token_buffer[2] == 'c' &&
+                        token_buffer[3] <= 32) ||
+                       (token_buffer[0] == '/' && token_buffer[1] == '*' && token_buffer[2] == 'c'))
+
                 {
-                    char *at = (char *)token_buffer + 4;
+                    int is_multiline_comment = (token_buffer[1] == '*');
+                    if(is_multiline_comment)
+                    {
+                        if(token_buffer[token_buffer_size-1] == '/' &&
+                           token_buffer[token_buffer_size-2] == '*')
+                        {
+                            token_buffer[token_buffer_size-2] = 0;
+                        }
+                    }
+
+                    char *at = (char *)token_buffer + 3;
                     CalcNode *expr = Fleury4ParseCalcCode(&arena, &at);
-                     CalcInterpretResult result = Fleury4InterpretCalcExpression(&symbol_table, expr);
-                    
+                     CalcInterpretResult result = Fleury4InterpretCalcCode(context, expr);
+
                     char result_buffer[256] = {0};
                     String_Const_u8 result_string =
                     {
                         (u8 *)result_buffer,
                     };
-                    
-                    if(result.error)
+
+                    switch(result.type)
                     {
-                        result_string.size = (u64)snprintf(result_buffer, sizeof(result_buffer), "= (syntax error)");
+                        case CALC_TYPE_error:
+                        {
+                            result_string.size = (u64)snprintf(result_buffer, sizeof(result_buffer),
+                                                               "= (syntax error: \'%s\')", result.error);
+                            break;
+                        }
+                        case CALC_TYPE_number:
+                        {
+                            result_string.size = (u64)snprintf(result_buffer, sizeof(result_buffer),
+                                                               "= %f", result.f64_value);
+                            break;
+                        }
+                        case CALC_TYPE_string:
+                        {
+                            result_string.size = (u64)snprintf(result_buffer, sizeof(result_buffer),
+                                                               "= '%.*s'", result.string_length, result.string_value);
+                            break;
+                        }
+                        default: break;
                     }
-                    else
-                    {
-                        result_string.size = (u64)snprintf(result_buffer, sizeof(result_buffer), "= %f", result.value);
-                    }
-                    
+
                     Vec2_f32 point =
                     {
                         comment_last_char_rect.x1 + 20,
                         comment_first_char_rect.y0,
                     };
-                    
+
                     u32 color = finalize_color(defcolor_comment, 0);
                     color &= 0x00ffffff;
                     color |= 0x80000000;
                     draw_string(app, get_face_id(app, buffer), result_string, point, color);
-                    
+
+                    Rect_f32 view_rect = view_get_screen_rect(app, view);
+
+                    Rect_f32 graph_rect = {0};
+                    {
+                        graph_rect.x0 = view_rect.x1 - 30 - 300;
+                        graph_rect.y0 = comment_first_char_rect.y0;
+                        graph_rect.x1 = graph_rect.x0 + 300;
+                        graph_rect.y1 = graph_rect.y0 + 200;
+                    }
+
+                    CalcNode *last_parent_call = 0;
+                    for(CalcInterpretGraph *graph = result.first_graph; graph;
+                        graph = graph->next)
+                    {
+                        if(last_parent_call == 0 || graph->parent_call != last_parent_call)
+                        {
+                            Fleury4GraphCalcExpression(app, get_face_id(app, buffer), graph_rect, graph, context);
+
+                        // NOTE(rjf): Bump graph rect forward.
+                        {
+                            f32 rect_height = graph_rect.y1 - graph_rect.y0;
+                            graph_rect.y0 += rect_height + 50;
+                        graph_rect.y1 += rect_height + 50;
+                            }
+
+                            last_parent_call = graph->parent_call;
+                        }
+                    }
+
                 }
-                
+
             }
-            
+
         }
-        
+
     }
-    
+
 }
 
 //~ NOTE(rjf): C/C++ Token Highlighting
@@ -2086,7 +2745,7 @@ static ARGB_Color
 Fleury4GetCTokenColor(Token token)
 {
      ARGB_Color color = ARGBFromID(defcolor_text_default);
-    
+
     switch(token.kind)
     {
         case TokenBaseKind_Preprocessor:     color = ARGBFromID(defcolor_preproc); break;
@@ -2096,7 +2755,7 @@ Fleury4GetCTokenColor(Token token)
         case TokenBaseKind_LiteralInteger:   color = ARGBFromID(defcolor_int_constant); break;
         case TokenBaseKind_LiteralFloat:     color = ARGBFromID(defcolor_float_constant); break;
         case TokenBaseKind_Operator:         color = ARGBFromID(defcolor_preproc); break;
-        
+
         case TokenBaseKind_ScopeOpen:
         case TokenBaseKind_ScopeClose:
         case TokenBaseKind_ParentheticalOpen:
@@ -2106,7 +2765,7 @@ Fleury4GetCTokenColor(Token token)
             u32 r = (color & 0x00ff0000) >> 16;
             u32 g = (color & 0x0000ff00) >>  8;
             u32 b = (color & 0x000000ff) >>  0;
-            
+
             if(global_dark_mode)
             {
                 r = (r * 3) / 5;
@@ -2119,12 +2778,12 @@ Fleury4GetCTokenColor(Token token)
                 g = (g * 4) / 3;
                 b = (b * 4) / 3;
             }
-            
+
             color = 0xff000000 | (r << 16) | (g << 8) | (b << 0);
-            
+
             break;
         }
-        
+
         default:
         {
             switch(token.sub_kind)
@@ -2153,7 +2812,7 @@ Fleury4GetCTokenColor(Token token)
             break;
         }
     }
-    
+
     return color;
 }
 
@@ -2163,7 +2822,7 @@ Fleury4DrawCTokenColors(Application_Links *app, Text_Layout_ID text_layout_id, T
     Range_i64 visible_range = text_layout_get_visible_range(app, text_layout_id);
     i64 first_index = token_index_from_pos(array, visible_range.first);
     Token_Iterator_Array it = token_iterator_index(0, array, first_index);
-    
+
     for(;;)
     {
         Token *token = token_it_read(&it);
@@ -2188,17 +2847,17 @@ Fleury4RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id,
                     Rect_f32 rect, Frame_Info frame_info)
 {
     ProfileScope(app, "[Fleury] Render Buffer");
-    
+
     View_ID active_view = get_active_view(app, Access_Always);
     b32 is_active_view = (active_view == view_id);
     Rect_f32 prev_clip = draw_set_clip(app, rect);
-    
+
     // NOTE(allen): Token colorizing
     Token_Array token_array = get_token_array_from_buffer(app, buffer);
     if(token_array.tokens != 0)
     {
         Fleury4DrawCTokenColors(app, text_layout_id, &token_array);
-        
+
         // NOTE(allen): Scan for TODOs and NOTEs
         if(global_config.use_comment_keyword)
         {
@@ -2209,7 +2868,7 @@ Fleury4RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id,
                 user_string.size = snprintf(user_string_buf, sizeof(user_string_buf), "(%.*s)",
                                             string_expand(global_config.user_name));
             }
-            
+
             Comment_Highlight_Pair pairs[] =
             {
                 {string_u8_litexpr("NOTE"), finalize_color(defcolor_comment_pop, 0)},
@@ -2225,28 +2884,28 @@ Fleury4RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id,
         Range_i64 visible_range = text_layout_get_visible_range(app, text_layout_id);
         paint_text_color_fcolor(app, text_layout_id, visible_range, fcolor_id(defcolor_text_default));
     }
-    
+
     i64 cursor_pos = view_correct_cursor(app, view_id);
     view_correct_mark(app, view_id);
-    
+
     // NOTE(allen): Scope highlight
     if(global_config.use_scope_highlight)
     {
         Color_Array colors = finalize_color_array(defcolor_back_cycle);
         draw_scope_highlight(app, buffer, text_layout_id, cursor_pos, colors.vals, colors.count);
     }
-    
+
     // NOTE(rjf): Brace highlight
     {
         ARGB_Color colors[] =
         {
             0xff8ffff2,
         };
-        
+
         Fleury4RenderBraceHighlight(app, buffer, text_layout_id, cursor_pos,
                              colors, sizeof(colors)/sizeof(colors[0]));
     }
-    
+
     if(global_config.use_error_highlight || global_config.use_jump_highlight)
     {
         // NOTE(allen): Error highlight
@@ -2257,7 +2916,7 @@ Fleury4RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id,
             draw_jump_highlights(app, buffer, text_layout_id, compilation_buffer,
                                  fcolor_id(defcolor_highlight_junk));
         }
-        
+
         // NOTE(allen): Search highlight
         if(global_config.use_jump_highlight)
         {
@@ -2269,14 +2928,14 @@ Fleury4RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id,
             }
         }
     }
-    
+
     // NOTE(allen): Color parens
     if(global_config.use_paren_helper)
     {
         Color_Array colors = finalize_color_array(defcolor_text_cycle);
         draw_paren_highlight(app, buffer, text_layout_id, cursor_pos, colors.vals, colors.count);
     }
-    
+
     // NOTE(allen): Line highlight
     if(global_config.highlight_line_at_cursor && is_active_view)
     {
@@ -2284,18 +2943,18 @@ Fleury4RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id,
         draw_line_highlight(app, text_layout_id, line_number,
                             fcolor_id(defcolor_highlight_cursor_line));
     }
-    
+
     // NOTE(rjf): Special comments
     {
         Fleury4RenderDividerComments(app, buffer, view_id, text_layout_id);
         Fleury4RenderCalcComments(app, buffer, view_id, text_layout_id);
     }
-    
+
     // NOTE(allen): Cursor shape
     Face_Metrics metrics = get_face_metrics(app, face_id);
     f32 cursor_roundness = (metrics.normal_advance*0.5f)*0.9f;
     f32 mark_thickness = 2.f;
-    
+
     // NOTE(allen): Cursor
     switch (fcoder_mode)
     {
@@ -2304,39 +2963,39 @@ Fleury4RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id,
             Fleury4RenderCursor(app, view_id, is_active_view, buffer, text_layout_id, cursor_roundness, mark_thickness, frame_info);
             break;
         }
-        
+
         case FCoderMode_NotepadLike:
         {
             draw_notepad_style_cursor_highlight(app, view_id, buffer, text_layout_id, cursor_roundness);
             break;
         }
     }
-    
+
     // NOTE(rjf): Brace annotations
     {
         Fleury4RenderCloseBraceAnnotation(app, buffer, text_layout_id, cursor_pos);
     }
-    
+
     // NOTE(rjf): Brace lines
     {
         Fleury4RenderBraceLines(app, buffer, view_id, text_layout_id, cursor_pos);
     }
-    
+
     // NOTE(allen): put the actual text on the actual screen
     draw_text_layout_default(app, text_layout_id);
-    
+
     // NOTE(rjf): Draw code peek
     if(global_code_peek_open)
     {
         Fleury4RenderRangeHighlight(app, view_id, text_layout_id, global_code_peek_token_range);
         Fleury4RenderCodePeek(app, view_id, face_id, buffer, frame_info);
     }
-    
+
     // NOTE(rjf): Draw power mode.
     {
         Fleury4RenderPowerMode(app, view_id, face_id, frame_info);
     }
-    
+
     draw_set_clip(app, prev_clip);
 }
 
@@ -2348,16 +3007,16 @@ Fleury4Render(Application_Links *app, Frame_Info frame_info, View_ID view_id)
     ProfileScope(app, "[Fleury] Render");
     View_ID active_view = get_active_view(app, Access_Always);
     b32 is_active_view = (active_view == view_id);
-    
+
     Rect_f32 region = draw_background_and_margin(app, view_id, is_active_view);
     Rect_f32 prev_clip = draw_set_clip(app, region);
-    
+
     Buffer_ID buffer = view_get_buffer(app, view_id, Access_Always);
     Face_ID face_id = get_face_id(app, buffer);
     Face_Metrics face_metrics = get_face_metrics(app, face_id);
     f32 line_height = face_metrics.line_height;
     f32 digit_advance = face_metrics.decimal_digit_advance;
-    
+
     // NOTE(allen): file bar
     b64 showing_file_bar = false;
     if(view_get_setting(app, view_id, ViewSetting_ShowFileBar, &showing_file_bar) && showing_file_bar)
@@ -2366,22 +3025,22 @@ Fleury4Render(Application_Links *app, Frame_Info frame_info, View_ID view_id)
         draw_file_bar(app, view_id, buffer, face_id, pair.min);
         region = pair.max;
     }
-    
+
     Buffer_Scroll scroll = view_get_buffer_scroll(app, view_id);
-    
+
     Buffer_Point_Delta_Result delta = delta_apply(app, view_id, frame_info.animation_dt, scroll);
-    
+
     if(!block_match_struct(&scroll.position, &delta.point))
     {
         block_copy_struct(&scroll.position, &delta.point);
         view_set_buffer_scroll(app, view_id, scroll, SetBufferScroll_NoCursorChange);
     }
-    
+
     if(delta.still_animating)
     {
         animate_in_n_milliseconds(app, 0);
     }
-    
+
     // NOTE(allen): query bars
     {
         Query_Bar *space[32];
@@ -2397,7 +3056,7 @@ Fleury4Render(Application_Links *app, Frame_Info frame_info, View_ID view_id)
             }
         }
     }
-    
+
     // NOTE(allen): FPS hud
     if(show_fps_hud)
     {
@@ -2406,7 +3065,7 @@ Fleury4Render(Application_Links *app, Frame_Info frame_info, View_ID view_id)
         region = pair.min;
 animate_in_n_milliseconds(app, 1000);
     }
-    
+
     // NOTE(allen): layout line numbers
     Rect_f32 line_number_rect = {};
     if(global_config.show_line_number_margins)
@@ -2415,7 +3074,7 @@ animate_in_n_milliseconds(app, 1000);
         line_number_rect = pair.min;
         region = pair.max;
     }
-    
+
     // NOTE(allen): begin buffer render
     Buffer_Point buffer_point = scroll.position;
     if(is_active_view)
@@ -2424,16 +3083,16 @@ animate_in_n_milliseconds(app, 1000);
         global_power_mode.screen_shake -= global_power_mode.screen_shake * frame_info.animation_dt * 12.f;
     }
     Text_Layout_ID text_layout_id = text_layout_create(app, buffer, region, buffer_point);
-    
+
     // NOTE(allen): draw line numbers
     if(global_config.show_line_number_margins)
     {
         draw_line_number_margin(app, view_id, buffer, face_id, text_layout_id, line_number_rect);
     }
-    
+
     // NOTE(allen): draw the buffer
     Fleury4RenderBuffer(app, view_id, face_id, buffer, text_layout_id, region, frame_info);
-    
+
     text_layout_free(app, text_layout_id);
     draw_set_clip(app, prev_clip);
 }
@@ -2445,7 +3104,7 @@ Fleury4SetBindings(Mapping *mapping)
 {
     MappingScope();
     SelectMapping(mapping);
-    
+
     SelectMap(mapid_global);
     BindCore(default_startup, CoreCode_Startup);
     BindCore(default_try_exit, CoreCode_TryExit);
@@ -2492,7 +3151,7 @@ Fleury4SetBindings(Mapping *mapping)
     Bind(exit_4coder,          KeyCode_F4, KeyCode_Alt);
     BindMouseWheel(mouse_wheel_scroll);
     BindMouseWheel(mouse_wheel_change_face_size, KeyCode_Control);
-    
+
     // NOTE(rjf): Custom bindings.
     {
         Bind(open_panel_vsplit, KeyCode_P, KeyCode_Control);
@@ -2501,7 +3160,7 @@ Fleury4SetBindings(Mapping *mapping)
         Bind(fleury_toggle_colors, KeyCode_Tick, KeyCode_Control);
         Bind(fleury_toggle_power_mode, KeyCode_P, KeyCode_Alt);
     }
-    
+
     SelectMap(mapid_file);
     ParentMap(mapid_global);
     BindTextInput(fleury_write_text_input);
@@ -2566,7 +3225,7 @@ Fleury4SetBindings(Mapping *mapping)
     Bind(if_read_only_goto_position,  KeyCode_Return);
     Bind(if_read_only_goto_position_same_panel, KeyCode_Return, KeyCode_Shift);
     Bind(view_jump_list_with_lister,  KeyCode_Period, KeyCode_Control, KeyCode_Shift);
-    
+
     SelectMap(mapid_code);
     ParentMap(mapid_file);
     BindTextInput(fleury_write_text_and_auto_indent);
@@ -2598,7 +3257,7 @@ Fleury4SetBindings(Mapping *mapping)
     Bind(if0_off,                    KeyCode_I, KeyCode_Alt);
     Bind(open_file_in_quotes,        KeyCode_1, KeyCode_Alt);
     Bind(open_matching_file_cpp,     KeyCode_2, KeyCode_Alt);
-    
+
     // NOTE(rjf): Custom bindings.
     {
         Bind(fleury_code_peek,          KeyCode_Alt, KeyCode_Control);
@@ -2606,7 +3265,7 @@ Fleury4SetBindings(Mapping *mapping)
         Bind(fleury_code_peek_go,       KeyCode_Return, KeyCode_Control);
         Bind(fleury_write_zero_struct,  KeyCode_0, KeyCode_Control);
     }
-    
+
 }
 
 //~ NOTE(rjf): Begin buffer hook
@@ -2614,16 +3273,16 @@ Fleury4SetBindings(Mapping *mapping)
 BUFFER_HOOK_SIG(Fleury4BeginBuffer)
 {
     ProfileScope(app, "[Fleury] Begin Buffer");
-    
+
     Scratch_Block scratch(app);
     b32 treat_as_code = false;
     String_Const_u8 file_name = push_buffer_file_name(app, scratch, buffer_id);
-    
+
     if(file_name.size > 0)
     {
         String_Const_u8_Array extensions = global_config.code_exts;
         String_Const_u8 ext = string_file_extension(file_name);
-        
+
         for(i32 i = 0; i < extensions.count; ++i)
         {
             if(string_match(ext, extensions.strings[i]))
@@ -2633,16 +3292,16 @@ BUFFER_HOOK_SIG(Fleury4BeginBuffer)
             }
         }
     }
-    
+
     Command_Map_ID map_id = (treat_as_code) ? (mapid_code) : (mapid_file);
     Managed_Scope scope = buffer_get_managed_scope(app, buffer_id);
     Command_Map_ID *map_id_ptr = scope_attachment(app, scope, buffer_map_id, Command_Map_ID);
     *map_id_ptr = map_id;
-    
+
     Line_Ending_Kind setting = guess_line_ending_kind_from_buffer(app, buffer_id);
     Line_Ending_Kind *eol_setting = scope_attachment(app, scope, buffer_eol_setting, Line_Ending_Kind);
     *eol_setting = setting;
-    
+
     // NOTE(allen): Decide buffer settings
     b32 wrap_lines = true;
     b32 use_virtual_whitespace = false;
@@ -2653,25 +3312,25 @@ BUFFER_HOOK_SIG(Fleury4BeginBuffer)
         use_virtual_whitespace = global_config.enable_virtual_whitespace;
         use_lexer = true;
     }
-    
+
     String_Const_u8 buffer_name = push_buffer_base_name(app, scratch, buffer_id);
     if(string_match(buffer_name, string_u8_litexpr("*compilation*")))
     {
         wrap_lines = false;
     }
-    
+
     if(use_lexer)
     {
         ProfileBlock(app, "begin buffer kick off lexer");
         Async_Task *lex_task_ptr = scope_attachment(app, scope, buffer_lex_task, Async_Task);
         *lex_task_ptr = async_task_no_dep(&global_async_system, do_full_lex_async, make_data_struct(&buffer_id));
     }
-    
+
     {
         b32 *wrap_lines_ptr = scope_attachment(app, scope, buffer_wrap_lines, b32);
         *wrap_lines_ptr = wrap_lines;
     }
-    
+
     if (use_virtual_whitespace)
     {
         if (use_lexer)
@@ -2687,7 +3346,7 @@ BUFFER_HOOK_SIG(Fleury4BeginBuffer)
 {
         buffer_set_layout(app, buffer_id, layout_generic);
     }
-    
+
     // no meaning for return
     return(0);
 }
@@ -2775,7 +3434,7 @@ CRC32(unsigned char *buf, int len)
         0xafb010b1, 0xab710d06, 0xa6322bdf, 0xa2f33668,
         0xbcb4666d, 0xb8757bda, 0xb5365d03, 0xb1f740b4
     };
-    
+
     unsigned int crc = init;
     while(len--)
     {
