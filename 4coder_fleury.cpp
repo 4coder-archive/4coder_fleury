@@ -7,13 +7,13 @@
 /*c
 
 plot_title('Plotting Test #1')
-plot_xaxis('x')
-plot_yaxis('y')
+plot_xaxis('x', -2, 2)
+plot_yaxis('y', -2, 2)
 plot(-2*x^3 + 3*x^2, -x^2, -x, 2*x)
 
 plot_title('Plotting Test #2')
-plot_xaxis('j')
-plot_yaxis('i')
+plot_xaxis('j', -3, 3)
+plot_yaxis('i', -3, 3)
 plot(x, x^2, -sin(x), cos(4*x))
 
 
@@ -26,9 +26,8 @@ plot(x, x^2, -sin(x), cos(4*x))
 
 
 
-
-
 */
+
 
 //~ NOTE(rjf): Hooks
 static i32  Fleury4BeginBuffer(Application_Links *app, Buffer_ID buffer_id);
@@ -1252,7 +1251,6 @@ Fleury4RenderDividerComments(Application_Links *app, Buffer_ID buffer, View_ID v
 
 }
 
-
 //~ NOTE(rjf): Plotting Tools
 
 typedef struct PlotData2D PlotData2D;
@@ -1915,6 +1913,7 @@ struct CalcInterpretGraph
     int x_axis_length;
     char *y_axis;
     int y_axis_length;
+    Rect_f32 plot_view;
     CalcInterpretGraph *next;
 };
 
@@ -1940,6 +1939,10 @@ struct CalcInterpretContext
     int x_axis_length;
     char *y_axis;
     int y_axis_length;
+    f32 x_low;
+    f32 x_high;
+    f32 y_low;
+    f32 y_high;
 };
 
 static CalcSymbolTable
@@ -2065,14 +2068,8 @@ Fleury4GraphCalcExpression(Application_Links *app, Face_ID face_id,
                            CalcInterpretContext *context)
 {
     CalcNode *parent_call = first_graph->parent_call;
-    Rect_f32 plot_view =
-    {
-        -2,
-        -2,
-        +2,
-        +2,
-    };
-
+    Rect_f32 plot_view = first_graph->plot_view;
+    
     PlotData2D plot_data = {0};
     {
         plot_data.app = app;
@@ -2102,13 +2099,13 @@ Fleury4GraphCalcExpression(Application_Links *app, Face_ID face_id,
     }
 
     // NOTE(rjf): Find function sample points.
-    int values_to_plot = 256;
-    float x_values[256];
-    float y_values[256];
+    int values_to_plot = 512;
+    float x_values[512];
+    float y_values[512];
     {
     for(int i = 0; i < values_to_plot; ++i)
     {
-        value_node.value = plot_view.x0 + (i / 256.f) * (plot_view.x1 - plot_view.x0);
+                value_node.value = plot_view.x0 + (i / (float)values_to_plot) * (plot_view.x1 - plot_view.x0);
         CalcInterpretResult result = Fleury4InterpretCalcExpression(context, expression);
         if(result.type != CALC_TYPE_number)
         {
@@ -2271,6 +2268,7 @@ Fleury4InterpretCalcExpression(CalcInterpretContext *context, CalcNode *root)
             case CALC_NODE_TYPE_negate:
             {
                 result = Fleury4InterpretCalcExpression(context, root->operand);
+                result.type = CALC_TYPE_number;
                 result.f64_value = -result.f64_value;
                 break;
             }
@@ -2370,59 +2368,95 @@ Fleury4InterpretCalcExpression(CalcInterpretContext *context, CalcNode *root)
                     }
                 }
 
-                else if(Fleury4CalcTokenMatch(root->token, "plot_xaxis"))
+                else if(Fleury4CalcTokenMatch(root->token, "plot_xaxis") ||
+                        Fleury4CalcTokenMatch(root->token, "plot_yaxis"))
                 {
+                    int is_y_axis = Fleury4CalcTokenMatch(root->token, "plot_yaxis");
+                    
                     result.type = CALC_TYPE_none;
-
-                    if(root->first_parameter)
+                    
+                    CalcNode *title_param = 0;
+                    CalcNode *low_param = 0;
+                    CalcNode *high_param = 0;
+                    
+                    CalcInterpretResult title_result = {0};
+                    CalcInterpretResult low_result = {0};
+                    CalcInterpretResult high_result = {0};
+                    
+                    for(CalcNode *param = root->first_parameter;
+                        param; param = param->next)
                     {
-                        CalcInterpretResult label = Fleury4InterpretCalcExpression(context, root->first_parameter);
-
-                        if(label.type == CALC_TYPE_string)
+                        CalcInterpretResult interpret =
+                            Fleury4InterpretCalcExpression(context, param);
+                        
+                        if(interpret.type == CALC_TYPE_string)
                         {
-                            context->x_axis = label.string_value + 1;
-                            context->x_axis_length = label.string_length - 2;
+                            if(title_param)
+                            {
+                                result.type = CALC_TYPE_error;
+                                result.error = is_y_axis ?
+                                    "plot_yaxis only accepts one string." :
+                                "plot_xaxis only accepts one string.";
+                                goto end_interpret;
+                            }
+                            else
+                            {
+                                title_param = param;
+                                title_result = interpret;
+                            }
+                        }
+                        else if(interpret.type == CALC_TYPE_number)
+                        {
+                            if(low_param)
+                            {
+                                if(high_param)
+                                {
+                                    result.type = CALC_TYPE_error;
+                                    result.error = is_y_axis ?
+                                        "plot_yaxis only accepts two numbers." :
+                                    "plot_xaxis only accepts two numbers.";
+                                    goto end_interpret;
+                                }
+                                else
+                                {
+                                    high_param = param;
+                                    high_result = interpret;
+                                }
+                            }
+                            else
+                            {
+                                low_param = param;
+                                low_result = interpret;
+                            }
                         }
                         else
                         {
-                            result.type = CALC_TYPE_error;
-                            result.error = "plot_xaxis expects a string.";
+                            result = interpret;
                             break;
+                        }
+                    }
+                    
+                    if(low_param && high_param)
+                    {
+                        if(is_y_axis)
+                        {
+                            context->y_axis = title_result.string_value + 1;
+                            context->y_axis_length = title_result.string_length - 2;
+                            context->y_low = (f32)low_result.f64_value;
+                            context->y_high = (f32)high_result.f64_value;
+                        }
+                        else
+                        {
+                            context->x_axis = title_result.string_value + 1;
+                            context->x_axis_length = title_result.string_length - 2;
+                            context->x_low = (f32)low_result.f64_value;
+                            context->x_high = (f32)high_result.f64_value;
                         }
                     }
                     else
                     {
                         result.type = CALC_TYPE_error;
-                        result.error = "plot_xaxis expects a string.";
-                        break;
-                    }
-                }
-
-                else if(Fleury4CalcTokenMatch(root->token, "plot_yaxis"))
-                {
-                    result.type = CALC_TYPE_none;
-
-                    if(root->first_parameter)
-                    {
-                        CalcInterpretResult label = Fleury4InterpretCalcExpression(context, root->first_parameter);
-
-                        if(label.type == CALC_TYPE_string)
-                        {
-                            context->y_axis = label.string_value + 1;
-                            context->y_axis_length = label.string_length - 2;
-                        }
-                        else
-                        {
-                            result.type = CALC_TYPE_error;
-                            result.error = "plot_yaxis expects a string.";
-                            break;
-                        }
-                    }
-                    else
-                    {
-                        result.type = CALC_TYPE_error;
-                        result.error = "plot_yaxis expects a string.";
-                        break;
+                        result.error = is_y_axis ? "plot_yaxis needs two bounds (title optional)." : "plot_xaxis needs two bounds (title optional).";
                     }
                 }
 
@@ -2451,6 +2485,9 @@ Fleury4InterpretCalcExpression(CalcInterpretContext *context, CalcNode *root)
                             new_graph->x_axis_length = context->x_axis_length;
                             new_graph->y_axis = context->y_axis;
                             new_graph->y_axis_length = context->y_axis_length;
+                            new_graph->plot_view =
+                                Rf32(context->x_low, context->y_low,
+                                     context->x_high, context->y_high);
                             *target = new_graph;
                             target = &(*target)->next;
                     }
@@ -2739,6 +2776,81 @@ Fleury4RenderCalcComments(Application_Links *app, Buffer_ID buffer, View_ID view
 
 }
 
+//~ NOTE(rjf): Plotting comments.
+
+static void
+Fleury4RenderPlotComments(Application_Links *app, Buffer_ID buffer, View_ID view,
+                             Text_Layout_ID text_layout_id)
+{
+    String_Const_u8 plot_comment_signifier =
+    {
+        "//p",
+        0,
+    };
+    for(; plot_comment_signifier.str[plot_comment_signifier.size];
+        ++plot_comment_signifier.size);
+    
+    Token_Array token_array = get_token_array_from_buffer(app, buffer);
+    Range_i64 visible_range = text_layout_get_visible_range(app, text_layout_id);
+    Scratch_Block scratch(app);
+    
+    if(token_array.tokens != 0)
+    {
+        i64 first_index = token_index_from_pos(&token_array, visible_range.first);
+        Token_Iterator_Array it = token_iterator_index(0, &token_array, first_index);
+        
+        Token *token = 0;
+        for(;;)
+        {
+            token = token_it_read(&it);
+            
+            if(token->pos >= visible_range.one_past_last || !token || !token_it_inc_non_whitespace(&it))
+            {
+                break;
+            }
+            
+            if(token->kind == TokenBaseKind_Comment)
+            {
+                Rect_f32 comment_first_char_rect =
+                    text_layout_character_on_screen(app, text_layout_id, token->pos);
+                
+                Range_i64 token_range =
+                {
+                    token->pos,
+                    token->pos + (token->size > (i64)plot_comment_signifier.size
+                                  ? (i64)plot_comment_signifier.size
+                                  : token->size),
+                };
+                
+                u8 token_buffer[256] = {0};
+                buffer_read_range(app, buffer, token_range, token_buffer);
+                String_Const_u8 token_string = { token_buffer, (u64)(token_range.end - token_range.start) };
+                
+                if(string_match(token_string, plot_comment_signifier))
+                {
+                    
+                    
+                    // NOTE(rjf): Render divider line.
+                    Rect_f32 rect =
+                    {
+                        comment_first_char_rect.x0,
+                        comment_first_char_rect.y0-2,
+                        10000,
+                        comment_first_char_rect.y0,
+                    };
+                    f32 roundness = 4.f;
+                    draw_rectangle(app, rect, roundness, fcolor_resolve(fcolor_id(defcolor_comment)));
+                }
+                
+            }
+            
+        }
+        
+    }
+    
+}
+
+
 //~ NOTE(rjf): C/C++ Token Highlighting
 
 static ARGB_Color
@@ -2943,13 +3055,12 @@ Fleury4RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id,
         draw_line_highlight(app, text_layout_id, line_number,
                             fcolor_id(defcolor_highlight_cursor_line));
     }
-
-    // NOTE(rjf): Special comments
+    
+    // NOTE(rjf): Divider Comments
     {
         Fleury4RenderDividerComments(app, buffer, view_id, text_layout_id);
-        Fleury4RenderCalcComments(app, buffer, view_id, text_layout_id);
     }
-
+    
     // NOTE(allen): Cursor shape
     Face_Metrics metrics = get_face_metrics(app, face_id);
     f32 cursor_roundness = (metrics.normal_advance*0.5f)*0.9f;
@@ -2983,14 +3094,24 @@ Fleury4RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id,
 
     // NOTE(allen): put the actual text on the actual screen
     draw_text_layout_default(app, text_layout_id);
-
+    
     // NOTE(rjf): Draw code peek
     if(global_code_peek_open)
     {
         Fleury4RenderRangeHighlight(app, view_id, text_layout_id, global_code_peek_token_range);
         Fleury4RenderCodePeek(app, view_id, face_id, buffer, frame_info);
     }
-
+    
+    // NOTE(rjf): Draw calc comments.
+    {
+        Fleury4RenderCalcComments(app, buffer, view_id, text_layout_id);
+    }
+    
+    // NOTE(rjf): Draw plot comments.
+    {
+        Fleury4RenderPlotComments(app, buffer, view_id, text_layout_id);
+    }
+    
     // NOTE(rjf): Draw power mode.
     {
         Fleury4RenderPowerMode(app, view_id, face_id, frame_info);
