@@ -16,12 +16,78 @@
 #include "4coder_fleury_plot.cpp"
 #include "4coder_fleury_calc.cpp"
 
+/*c
+
+plot_function_samples(100)
+
+
+
+
+plot_title('My Plot')
+plot_xaxis('x', -4, 4)
+plot_yaxis('y', -4, 4)
+plot(x^2 * sin(time()), 4*cos(time())*sin(x*time()))
+
+
+
+
+
+
+
+
+
+
+
+
+
+plot(sin(time())*cos(x+time()), x^3 * sin(time()), sin(time())*x)
+*/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 /*c
 plot_title('Histogram')
 plot_bin_count(10)
-plot_bin_range(-40, 40)
+plot_bin_range(-40*sin(time())^2, 40*sin(time())^2)
 plot_histogram(@global_data, @global_data_2)
 */
 
@@ -118,7 +184,6 @@ static float global_data_3[] =
 
 
 /*c
-
 plot_function_samples(100)
 
 plot_title('Plotting Data')
@@ -132,12 +197,30 @@ plot_xaxis('x', -0.25, 1.25)
 plot_yaxis('y', -0.25, 1.25)
 plot(-2*x^3 + 3*x^2, -x^2, -x, 2*x)
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 plot_title('Plotting Functions #2')
 plot_xaxis('x', -2, 2)
 plot_yaxis('y', -3, 3)
-plot(1/x, x^2, -sin(x), cos(4*x))
-
-plot(x)
+plot(1/(x), x^2, -sin(x), cos(4*x))
 */
 
 
@@ -429,7 +512,7 @@ Fleury4RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id,
     
     // NOTE(rjf): Draw calc comments.
     {
-        Fleury4RenderCalcComments(app, buffer, view_id, text_layout_id);
+        Fleury4RenderCalcComments(app, buffer, view_id, text_layout_id, frame_info);
     }
     
     // NOTE(rjf): Draw power mode.

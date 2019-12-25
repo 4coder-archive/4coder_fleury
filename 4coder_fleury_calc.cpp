@@ -721,6 +721,7 @@ struct CalcInterpretContext
     Text_Layout_ID text_layout_id;
     MemoryArena *arena;
     CalcSymbolTable *symbol_table;
+    f32 current_time;
     
     // NOTE(rjf): Plot data.
     struct
@@ -1025,7 +1026,7 @@ Fleury4GraphCalcExpression(Application_Links *app, Face_ID face_id,
         plot_data.num_bins       = first_graph->num_bins;
         plot_data.bin_data_range = first_graph->bin_data_range;
         
-        if(first_graph->num_bins != 0)
+        if(first_graph->num_bins > 0)
         {
             plot_data.bin_group_count = plot_count;
             plot_data.bins = (int *)MemoryArenaAllocate(context->arena, sizeof(*plot_data.bins)*plot_data.num_bins*
@@ -1352,6 +1353,15 @@ CALC_BUILT_IN_FUNCTION(Fleury4CalcPlotBinRange)
     return result;
 }
 
+static
+CALC_BUILT_IN_FUNCTION(Fleury4CalcTime)
+{
+    CalcInterpretResult result = {0};
+    result.value = CalcValueF64((f64)context->current_time);
+    animate_in_n_milliseconds(context->app, 0);
+    return result;
+}
+
 static CalcInterpretResult
 Fleury4CallCalcBuiltInFunction(CalcInterpretContext *context, CalcNode *root)
 {
@@ -1408,6 +1418,8 @@ Fleury4CallCalcBuiltInFunction(CalcInterpretContext *context, CalcNode *root)
             CALC_TYPE_none,
             2, { CALC_TYPE_number, CALC_TYPE_number },
         },
+        
+        { "time", Fleury4CalcTime, CALC_TYPE_number, },
         
     };
     
@@ -1897,8 +1909,11 @@ Fleury4InterpretCalcCode(CalcInterpretContext *context, CalcNode *tree_root)
 
 static void
 Fleury4RenderCalcComments(Application_Links *app, Buffer_ID buffer, View_ID view,
-                          Text_Layout_ID text_layout_id)
+                          Text_Layout_ID text_layout_id, Frame_Info frame_info)
 {
+    static f32 current_time = 0;
+    current_time += frame_info.literal_dt;
+    
     Token_Array token_array = get_token_array_from_buffer(app, buffer);
     Range_i64 visible_range = text_layout_get_visible_range(app, text_layout_id);
     Scratch_Block scratch(app);
@@ -1917,6 +1932,7 @@ Fleury4RenderCalcComments(Application_Links *app, Buffer_ID buffer, View_ID view
         context->arena = &arena;
         context->symbol_table = &symbol_table;
         context->num_function_samples = 128;
+        context->current_time = current_time;
         
         i64 first_index = token_index_from_pos(&token_array, visible_range.first);
         Token_Iterator_Array it = token_iterator_index(0, &token_array, first_index);
