@@ -1005,6 +1005,13 @@ Fleury4GraphCalcExpression(Application_Links *app, Face_ID face_id,
     CalcNode *parent_call = first_graph->parent_call;
     Rect_f32 plot_view = first_graph->plot_view;
     
+    int plot_count = 0;
+    for(CalcInterpretGraph *graph = first_graph; graph && graph->parent_call == parent_call;
+        graph = graph->next)
+    {
+        ++plot_count;
+    }
+    
     PlotData2D plot_data = {0};
     {
         plot_data.mode           = first_graph->mode;
@@ -1020,8 +1027,10 @@ Fleury4GraphCalcExpression(Application_Links *app, Face_ID face_id,
         
         if(first_graph->num_bins != 0)
         {
-            plot_data.bins = (int *)MemoryArenaAllocate(context->arena, sizeof(*plot_data.bins)*plot_data.num_bins);
-            MemorySet(plot_data.bins, 0, sizeof(*plot_data.bins)*plot_data.num_bins);
+            plot_data.bin_group_count = plot_count;
+            plot_data.bins = (int *)MemoryArenaAllocate(context->arena, sizeof(*plot_data.bins)*plot_data.num_bins*
+                                                        plot_data.bin_group_count);
+            MemorySet(plot_data.bins, 0, sizeof(*plot_data.bins)*plot_data.num_bins*plot_data.bin_group_count);
         }
     }
     Fleury4BeginPlot2D(&plot_data);
@@ -1422,7 +1431,7 @@ Fleury4CallCalcBuiltInFunction(CalcInterpretContext *context, CalcNode *root)
             if(param_count < functions[i].required_parameter_count)
             {
                 char *error_string =
-                    MakeCStringOnMemoryArena(context->arena, "'%s' expects at least %i parameters.",
+                    MakeCStringOnMemoryArena(context->arena, "%s expects at least %i parameters.",
                                              functions[i].name, functions[i].required_parameter_count);
                 result.value = CalcValueError(error_string);
                 correct_call = 0;

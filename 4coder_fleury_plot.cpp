@@ -1,6 +1,14 @@
 
 //~ NOTE(rjf): Plotting Tools
 
+static ARGB_Color global_plot_color_cycle[] =
+{
+    0xff03d3fc,
+    0xff22b80b,
+    0xfff0bb0c,
+    0xfff0500c,
+};
+
 typedef enum Plot2DMode Plot2DMode;
 enum Plot2DMode
 {
@@ -29,11 +37,12 @@ struct PlotData2D
     int num_bins;
     int *bins;
     Range_f32 bin_data_range;
+    int bin_group_count;
     
-    // NOTE(rjf): Used internally.
+    // NOTE(rjf): Used internally; zero initialize.
     Rect_f32 last_clip;
     int color_cycle_position;
-    int total_data_count;
+    int current_bin_group;
 };
 
 typedef enum Plot2DStyleFlags Plot2DStyleFlags;
@@ -127,18 +136,10 @@ Fleury4Plot2DPoints(PlotData2D *plot, i32 style_flags,
     f32 rect_width = rect.x1 - rect.x0;
     f32 rect_height = rect.y1 - rect.y0;
     
-    ARGB_Color function_color_cycle[] =
-    {
-        0xff03d3fc,
-        0xff22b80b,
-        0xfff0bb0c,
-        0xfff0500c,
-    };
-    
     // NOTE(rjf): Draw function samples.
     {
         ARGB_Color function_color =
-            function_color_cycle[(plot->color_cycle_position++) % ArrayCount(function_color_cycle)];
+            global_plot_color_cycle[(plot->color_cycle_position++) % ArrayCount(global_plot_color_cycle)];
         
         for(int i = 0; i < data_count; ++i)
         {
@@ -181,21 +182,16 @@ Fleury4Plot2DHistogram(PlotData2D *plot, float *data, int data_count)
 {
     if(plot->bins && plot->num_bins > 0)
     {
-        int data_that_is_plotted = data_count;
         for(int i = 0; i < data_count; ++i)
         {
             float t = (data[i] - plot->bin_data_range.min) / (plot->bin_data_range.max - plot->bin_data_range.min);
             int bin_to_go_in = (int)(plot->num_bins * t);
             if(bin_to_go_in >= 0 && bin_to_go_in < plot->num_bins)
             {
-                ++plot->bins[bin_to_go_in];
-            }
-            else
-            {
-                --data_that_is_plotted;
+                ++plot->bins[bin_to_go_in + plot->current_bin_group*plot->num_bins];
             }
         }
-        plot->total_data_count += data_that_is_plotted;
+    ++plot->current_bin_group;
     }
 }
 
@@ -204,15 +200,30 @@ Fleury4EndPlot2D(PlotData2D *plot)
 {
     if(plot->mode == PLOT2D_MODE_HISTOGRAM)
     {
-        for(int i = 0; i < plot->num_bins; ++i)
+        f32 bin_screen_width = ((plot->screen_rect.x1-plot->screen_rect.x0) / plot->num_bins) / plot->bin_group_count;
+        
+        for(int bin_group = 0; bin_group < plot->bin_group_count; ++bin_group)
         {
+            int total_data = 0;
+            
+            for(int i = 0; i < plot->num_bins; ++i)
+            {
+                total_data += plot->bins[i + bin_group*plot->num_bins];
+            }
+            
+            ARGB_Color color = global_plot_color_cycle[bin_group % ArrayCount(global_plot_color_cycle)];
+            
+        for(int i = 0; i < plot->num_bins; ++i)
+            {
+                int bin_index = i + bin_group*plot->num_bins;
             Rect_f32 bin_rect = {0};
-            bin_rect.x0 = plot->screen_rect.x0 + ((float)i/plot->num_bins)*(plot->screen_rect.x1-plot->screen_rect.x0);
-            bin_rect.x1 = bin_rect.x0 + (float)(plot->screen_rect.x1-plot->screen_rect.x0)/plot->num_bins;
+            bin_rect.x0 = plot->screen_rect.x0 + ((float)i/plot->num_bins)*(plot->screen_rect.x1-plot->screen_rect.x0) + bin_screen_width*bin_group;
+                bin_rect.x1 = bin_rect.x0 + bin_screen_width;
             bin_rect.y0 = bin_rect.y1 = plot->screen_rect.y1;
-            bin_rect.y0 -= ((float)plot->bins[i] / plot->total_data_count) * (plot->screen_rect.y1 - plot->screen_rect.y0);
-            draw_rectangle(plot->app, bin_rect, 4.f, 0xffff0000);
+            bin_rect.y0 -= ((float)plot->bins[bin_index] / total_data) * (plot->screen_rect.y1 - plot->screen_rect.y0);
+            draw_rectangle(plot->app, bin_rect, 4.f, color);
         }
+    }
     }
     
     draw_rectangle_outline(plot->app, plot->screen_rect, 4.f, 3.f, fcolor_resolve(fcolor_id(defcolor_pop2)));
