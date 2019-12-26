@@ -212,6 +212,7 @@ CalcNodeType(add,                    1)\
 CalcNodeType(subtract,               1)\
 CalcNodeType(multiply,               2)\
 CalcNodeType(divide,                 2)\
+CalcNodeType(modulus,                2)\
 CalcNodeType(raise_to_power,         0)\
 CalcNodeType(negate,                 0)\
 CalcNodeType(assignment,             0)
@@ -404,10 +405,17 @@ Fleury4ParseCalcUnaryExpression(MemoryArena *arena, char **at_ptr)
                 break;
             }
             
-            *target_member = Fleury4ParseCalcExpression(arena, at_ptr);
-            target_member = &(*target_member)->next;
-            
+            CalcNode *member_expression = Fleury4ParseCalcExpression(arena, at_ptr);
             while(Fleury4RequireCalcToken(at_ptr, ","));
+            if(member_expression)
+            {
+                *target_member = member_expression;
+                target_member = &(*target_member)->next;
+            }
+            else
+            {
+                break;
+            }
         }
         
         Fleury4RequireCalcToken(at_ptr, "]");
@@ -448,6 +456,10 @@ Fleury4GetCalcBinaryOperatorTypeFromToken(CalcToken token)
             else if(token.string[0] == '/')
             {
                 type = CALC_NODE_TYPE_divide;
+            }
+            else if(token.string[0] == '%')
+            {
+                type = CALC_NODE_TYPE_modulus;
             }
             break;
         }
@@ -588,7 +600,8 @@ typedef struct CalcSymbolKey CalcSymbolKey;
 struct CalcSymbolKey
 {
     char *string;
-    int string_length;
+    i32 string_length;
+    b32 deleted;
 };
 
 typedef struct CalcSymbolValue CalcSymbolValue;
@@ -608,21 +621,24 @@ struct CalcSymbolTable
 typedef struct CalcInterpretGraph CalcInterpretGraph;
 struct CalcInterpretGraph
 {
-    CalcNode *graph_expression;
-    CalcNode *input_value;
+    CalcInterpretGraph *next;
     CalcNode *parent_call;
-    char *plot_title;
-    int plot_title_length;
-    char *x_axis;
-    int x_axis_length;
-    char *y_axis;
-    int y_axis_length;
-    Rect_f32 plot_view;
     Plot2DMode mode;
+    String_Const_u8 plot_title;
+    String_Const_u8 x_axis;
+    String_Const_u8 y_axis;
     int num_function_samples;
+    Rect_f32 plot_view;
     int num_bins;
     Range_f32 bin_data_range;
-    CalcInterpretGraph *next;
+    union
+    {
+        float *x_data;
+        float *data;
+    };
+    float *y_data;
+    int data_count;
+    i32 style_flags;
 };
 
 typedef struct CalcValue CalcValue;
@@ -732,10 +748,7 @@ struct CalcInterpretContext
         int x_axis_length;
         char *y_axis;
         int y_axis_length;
-        f32 x_low;
-        f32 x_high;
-        f32 y_low;
-        f32 y_high;
+        Rect_f32 plot_view;
         int num_function_samples;
         int num_bins;
         f32 bin_range_low;
@@ -830,9 +843,10 @@ CalcSymbolTableLookup_(CalcSymbolTable *table, char *string, int length)
     
     for(;;)
     {
-        if(table->keys[hash].string)
+        if(table->keys[hash].string || table->keys[hash].deleted)
         {
-            if(StringMatchCaseSensitive(table->keys[hash].string, table->keys[hash].string_length,
+            if(!table->keys[hash].deleted &&
+               StringMatchCaseSensitive(table->keys[hash].string, table->keys[hash].string_length,
                                         string, length))
             {
                 value = table->values + hash;
@@ -881,21 +895,28 @@ CalcSymbolTableAdd(CalcSymbolTable *table, char *string, int string_length, Calc
 {
     unsigned int hash = StringCRC32(string, string_length) % table->size;
     unsigned int original_hash = hash;
+    unsigned int found_hash = 0;
     int found = 0;
     
     for(;;)
     {
-        if(table->keys[hash].string)
+        if(table->keys[hash].string || table->keys[hash].deleted)
         {
-            if(StringMatchCaseSensitive(table->keys[hash].string, table->keys[hash].string_length,
+            if(!table->keys[hash].deleted &&
+               StringMatchCaseSensitive(table->keys[hash].string, table->keys[hash].string_length,
                                         string, string_length))
             {
                 found = 1;
+                found_hash = hash;
                 break;
             }
-            else
+            else if(table->keys[hash].deleted)
             {
-                if(++hash >= table->size)
+                found = 1;
+                found_hash = hash;
+            }
+            
+            if(++hash >= table->size)
                 {
                     hash = 0;
                 }
@@ -903,20 +924,54 @@ CalcSymbolTableAdd(CalcSymbolTable *table, char *string, int string_length, Calc
                 {
                     break;
                 }
-            }
         }
         else
         {
             found = 1;
+            found_hash = hash;
             break;
         }
     }
     
     if(found)
     {
-        table->keys[hash].string = string;
-        table->keys[hash].string_length = string_length;
-        table->values[hash].node = node;
+        table->keys[found_hash].string = string;
+        table->keys[found_hash].string_length = string_length;
+        table->values[found_hash].node = node;
+    }
+}
+
+static void
+CalcSymbolTableRemove(CalcSymbolTable *table, char *string, int length)
+{
+    unsigned int hash = StringCRC32(string, length) % table->size;
+    unsigned int original_hash = hash;
+    
+    for(;;)
+    {
+        if(table->keys[hash].string || table->keys[hash].deleted)
+        {
+            if(!table->keys[hash].deleted &&
+               StringMatchCaseSensitive(table->keys[hash].string, table->keys[hash].string_length,
+                                        string, length))
+            {
+                table->keys[hash].deleted = 1;
+                break;
+            }
+            
+            if(++hash >= table->size)
+                {
+                    hash = 0;
+                }
+                if(hash == original_hash)
+                {
+                    break;
+                }
+        }
+        else
+        {
+            break;
+        }
     }
 }
 
@@ -1016,9 +1071,9 @@ Fleury4GraphCalcExpression(Application_Links *app, Face_ID face_id,
     PlotData2D plot_data = {0};
     {
         plot_data.mode           = first_graph->mode;
-        plot_data.title          = { first_graph->plot_title, (u64)first_graph->plot_title_length };
-        plot_data.x_axis         = { first_graph->x_axis, (u64)first_graph->x_axis_length };
-        plot_data.y_axis         = { first_graph->y_axis, (u64)first_graph->y_axis_length };
+        plot_data.title          = first_graph->plot_title;
+        plot_data.x_axis         = first_graph->x_axis;
+        plot_data.y_axis         = first_graph->y_axis;
         plot_data.screen_rect    = rect;
         plot_data.app            = app;
         plot_data.face_id        = face_id;
@@ -1039,181 +1094,26 @@ Fleury4GraphCalcExpression(Application_Links *app, Face_ID face_id,
     for(CalcInterpretGraph *graph = first_graph; graph && graph->parent_call == parent_call;
         graph = graph->next)
     {
-        CalcNode *expression = graph->graph_expression;
-        CalcInterpretResult expression_result = Fleury4InterpretCalcExpression(context, expression);
         
         switch(plot_data.mode)
         {
             
-            
             //~ NOTE(rjf): Line Graphs
             case PLOT2D_MODE_LINE:
             {
-                
-                // NOTE(rjf): Graphing scripting arrays.
-                if(expression_result.value.type == CALC_TYPE_array)
-                {
-                    
-                    // NOTE(rjf): Just Y data.
-                    if(expression_result.value.array_count > 0 &&
-                       expression_result.value.as_array[0].type == CALC_TYPE_number)
-                    {
-                        int values_to_plot = expression_result.value.array_count;
-                        float *x_values = (float *)MemoryArenaAllocate(context->arena, sizeof(float)*values_to_plot);
-                        float *y_values = (float *)MemoryArenaAllocate(context->arena, sizeof(float)*values_to_plot);
-                        
-                        for(int i = 0; i < values_to_plot; ++i)
-                        {
-                            x_values[i] = (float)i;
-                            y_values[i] = (float)expression_result.value.as_array[i].as_f64;
-                        }
-                        
-                        Fleury4Plot2DPoints(&plot_data, PLOT2D_POINTS, x_values, y_values, values_to_plot);
-                    }
-                    
-                    // NOTE(rjf): X/Y data arrays.
-                    else if(expression_result.value.array_count == 2 &&
-                            expression_result.value.as_array[0].type == CALC_TYPE_array &&
-                            expression_result.value.as_array[1].type == CALC_TYPE_array &&
-                            expression_result.value.as_array[0].array_count > 0 &&
-                            expression_result.value.as_array[0].array_count ==
-                            expression_result.value.as_array[1].array_count &&
-                            expression_result.value.as_array[0].as_array[0].type ==
-                            expression_result.value.as_array[1].as_array[0].type &&
-                            expression_result.value.as_array[0].as_array[0].type == CALC_TYPE_number)
-                    {
-                        int values_to_plot = expression_result.value.as_array[0].array_count;
-                        float *x_values = (float *)MemoryArenaAllocate(context->arena, sizeof(float)*values_to_plot);
-                        float *y_values = (float *)MemoryArenaAllocate(context->arena, sizeof(float)*values_to_plot);
-                        
-                        for(int i = 0; i < values_to_plot; ++i)
-                        {
-                            x_values[i] = (float)expression_result.value.as_array[0].as_array[i].as_f64;
-                            y_values[i] = (float)expression_result.value.as_array[1].as_array[i].as_f64;
-                        }
-                        
-                        Fleury4Plot2DPoints(&plot_data, PLOT2D_POINTS, x_values, y_values, values_to_plot);
-                    }
-                    
-                }
-                
-                // NOTE(rjf): Graphing data from source code.
-                else if(expression_result.value.type == CALC_TYPE_source_code_reference)
-                {
-                    float *data = 0;
-                    int data_count = 0;
-                    Fleury4GetDataFromSourceCode(context->app, context->buffer, context->text_layout_id,
-                                                 expression_result.value.as_token_offset, context->arena,
-                                                 &data, &data_count);
-                    
-                    // NOTE(rjf): Plot data.
-                    if(data && data_count)
-                    {
-                        float *x_data = (float *)MemoryArenaAllocate(context->arena, data_count * sizeof(*x_data));
-                        for(int i = 0; i < data_count; ++i)
-                        {
-                            x_data[i] = (float)i;
-                        }
-                        Fleury4Plot2DPoints(&plot_data, PLOT2D_POINTS, x_data, data, data_count);
-                    }
-                }
-                
-                // NOTE(rjf): Graphing scripting functions.
-                else
-                {
-                    CalcNode *value = graph->input_value;
-                    CalcNode value_node = {0};
-                    {
-                        value_node.type = CALC_NODE_TYPE_number;
-                    }
-                    
-                    if(value)
-                    {
-                        CalcSymbolTableAdd(context->symbol_table, value->token.string,
-                                           value->token.string_length, &value_node);
-                    }
-                    
-                    // NOTE(rjf): Find function sample points.
-                    int values_to_plot = graph->num_function_samples;
-                    float *x_values = (float *)MemoryArenaAllocate(context->arena, values_to_plot * sizeof(*x_values));
-                    float *y_values = (float *)MemoryArenaAllocate(context->arena, values_to_plot * sizeof(*y_values));
-                    {
-                        for(int i = 0; i < values_to_plot; ++i)
-                        {
-                            value_node.value = plot_view.x0 + (i / (float)values_to_plot) * (plot_view.x1 - plot_view.x0);
-                            CalcInterpretResult result = Fleury4InterpretCalcExpression(context, expression);
-                            if(result.value.type != CALC_TYPE_number)
-                            {
-                                goto end_graph;
-                            }
-                            else
-                            {
-                                x_values[i] = (float)value_node.value;
-                                y_values[i] = (float)result.value.as_f64;
-                            }
-                        }
-                    }
-                    
-                    Fleury4Plot2DPoints(&plot_data, PLOT2D_LINES, x_values, y_values, values_to_plot);
-                }
-                
+                Fleury4Plot2DPoints(&plot_data, graph->style_flags, graph->x_data, graph->y_data, graph->data_count);
                 break;
             }
-            
             
             //~ NOTE(rjf): Histogram
             case PLOT2D_MODE_HISTOGRAM:
             {
-                
-                // NOTE(rjf): Graphing scripting arrays.
-                if(expression_result.value.type == CALC_TYPE_array)
-                {
-                    
-                    if(expression_result.value.array_count > 0 &&
-                       expression_result.value.as_array[0].type == CALC_TYPE_number)
-                    {
-                        int values_to_plot = expression_result.value.array_count;
-                        float *values = (float *)MemoryArenaAllocate(context->arena, sizeof(float)*values_to_plot);
-                        
-                        for(int i = 0; i < values_to_plot; ++i)
-                        {
-                            values[i] = (float)expression_result.value.as_array[i].as_f64;
-                        }
-                        
-                        Fleury4Plot2DHistogram(&plot_data, values, values_to_plot);
-                    }
-                    
-                }
-                
-                // NOTE(rjf): Graphing data from source code.
-                else if(expression_result.value.type == CALC_TYPE_source_code_reference)
-                {
-                    float *data = 0;
-                    int data_count = 0;
-                    Fleury4GetDataFromSourceCode(context->app, context->buffer, context->text_layout_id,
-                                                 expression_result.value.as_token_offset, context->arena,
-                                                 &data, &data_count);
-                    
-                    // NOTE(rjf): Plot data.
-                    if(data && data_count)
-                    {
-                        Fleury4Plot2DHistogram(&plot_data, data, data_count);
-                    }
-                }
-                
-                // NOTE(rjf): Graphing scripting functions.
-                else
-                {
-                    
-                }
-                
+                Fleury4Plot2DHistogram(&plot_data, graph->data, graph->data_count);
                 break;
             }
             
             default: break;
         }
-        
-        end_graph:;
     }
     
     Fleury4EndPlot2D(&plot_data);
@@ -1360,6 +1260,206 @@ CALC_BUILT_IN_FUNCTION(Fleury4CalcTime)
     result.value = CalcValueF64((f64)context->current_time);
     animate_in_n_milliseconds(context->app, 0);
     return result;
+}
+
+static void
+Fleury4GenerateLinePlotData(CalcInterpretContext *context, CalcNode *expression,
+                             CalcNode *input_variable, float **x_data, float **y_data,
+                             int *data_count, i32 *style_flags_ptr)
+{
+    CalcInterpretResult expression_result = Fleury4InterpretCalcExpression(context, expression);
+    
+    *x_data = 0;
+    *y_data = 0;
+    *data_count = 0;
+    *style_flags_ptr = 0;
+    
+    i32 style_flags = 0;
+    
+    //~ NOTE(rjf): Plotting scripting arrays.
+    if(expression_result.value.type == CALC_TYPE_array)
+    {
+        style_flags |= PLOT2D_POINTS;
+        
+        // NOTE(rjf): Just Y data.
+        if(expression_result.value.array_count > 0 &&
+           expression_result.value.as_array[0].type == CALC_TYPE_number)
+        {
+            int values_to_plot = expression_result.value.array_count;
+            float *x_values = (float *)MemoryArenaAllocate(context->arena, sizeof(float)*values_to_plot);
+            float *y_values = (float *)MemoryArenaAllocate(context->arena, sizeof(float)*values_to_plot);
+            
+            for(int i = 0; i < values_to_plot; ++i)
+            {
+                x_values[i] = (float)i;
+                y_values[i] = (float)expression_result.value.as_array[i].as_f64;
+            }
+            
+            *x_data = x_values;
+            *y_data = y_values;
+            *data_count = values_to_plot;
+        }
+        
+        // NOTE(rjf): X/Y data arrays.
+        else if(expression_result.value.array_count == 2 &&
+                expression_result.value.as_array[0].type == CALC_TYPE_array &&
+                expression_result.value.as_array[1].type == CALC_TYPE_array &&
+                expression_result.value.as_array[0].array_count > 0 &&
+                expression_result.value.as_array[0].array_count ==
+                expression_result.value.as_array[1].array_count &&
+                expression_result.value.as_array[0].as_array[0].type ==
+                expression_result.value.as_array[1].as_array[0].type &&
+                expression_result.value.as_array[0].as_array[0].type == CALC_TYPE_number)
+        {
+            int values_to_plot = expression_result.value.as_array[0].array_count;
+            float *x_values = (float *)MemoryArenaAllocate(context->arena, sizeof(float)*values_to_plot);
+            float *y_values = (float *)MemoryArenaAllocate(context->arena, sizeof(float)*values_to_plot);
+            
+            for(int i = 0; i < values_to_plot; ++i)
+            {
+                x_values[i] = (float)expression_result.value.as_array[0].as_array[i].as_f64;
+                y_values[i] = (float)expression_result.value.as_array[1].as_array[i].as_f64;
+            }
+            
+            *x_data = x_values;
+            *y_data = y_values;
+            *data_count = values_to_plot;
+        }
+        
+    }
+    
+    
+    //~ NOTE(rjf): Graphing data from source code.
+    else if(expression_result.value.type == CALC_TYPE_source_code_reference)
+    {
+        style_flags |= PLOT2D_POINTS;
+        
+        float *y_values = 0;
+        int values_to_plot = 0;
+        Fleury4GetDataFromSourceCode(context->app, context->buffer, context->text_layout_id,
+                                     expression_result.value.as_token_offset, context->arena,
+                                     &y_values, &values_to_plot);
+        
+        // NOTE(rjf): Plot data.
+        if(y_values && values_to_plot)
+        {
+            float *x_values = (float *)MemoryArenaAllocate(context->arena, values_to_plot * sizeof(*x_values));
+            for(int i = 0; i < values_to_plot; ++i)
+            {
+                x_values[i] = (float)i;
+            }
+            *x_data = x_values;
+            *y_data = y_values;
+            *data_count = values_to_plot;
+        }
+    }
+    
+    
+    //~ NOTE(rjf): Graphing scripting functions.
+    else
+    {
+        style_flags |= PLOT2D_LINES;
+        
+        CalcNode *value = input_variable;
+        CalcNode value_node = {0};
+        {
+            value_node.type = CALC_NODE_TYPE_number;
+        }
+        
+        if(value)
+        {
+            CalcSymbolTableAdd(context->symbol_table, value->token.string,
+                               value->token.string_length, &value_node);
+        }
+        
+        // NOTE(rjf): Find function sample points.
+        int values_to_plot = context->num_function_samples;
+        float *x_values = (float *)MemoryArenaAllocate(context->arena, values_to_plot * sizeof(*x_values));
+        float *y_values = (float *)MemoryArenaAllocate(context->arena, values_to_plot * sizeof(*y_values));
+        {
+            for(int i = 0; i < values_to_plot; ++i)
+            {
+                value_node.value = context->plot_view.x0 + (i / (float)values_to_plot) * (context->plot_view.x1 - context->plot_view.x0);
+                CalcInterpretResult result = Fleury4InterpretCalcExpression(context, expression);
+                if(result.value.type != CALC_TYPE_number)
+                {
+                    break;
+                }
+                else
+                {
+                    x_values[i] = (float)value_node.value;
+                    y_values[i] = (float)result.value.as_f64;
+                }
+            }
+        }
+        
+        if(value)
+        {
+            CalcSymbolTableRemove(context->symbol_table, value->token.string,
+                               value->token.string_length);
+        }
+        
+        *x_data = x_values;
+        *y_data = y_values;
+        *data_count = values_to_plot;
+    }
+    
+    *style_flags_ptr = style_flags;
+}
+
+static void
+Fleury4GenerateHistogramPlotData(CalcInterpretContext *context, CalcNode *expression,
+                            CalcNode *input_variable, float **data, int *data_count)
+{
+    CalcInterpretResult expression_result = Fleury4InterpretCalcExpression(context, expression);
+    
+    *data = 0;
+    *data_count = 0;
+    
+    // NOTE(rjf): Graphing scripting arrays.
+    if(expression_result.value.type == CALC_TYPE_array)
+    {
+        
+        if(expression_result.value.array_count > 0 &&
+           expression_result.value.as_array[0].type == CALC_TYPE_number)
+        {
+            int values_to_plot = expression_result.value.array_count;
+            float *values = (float *)MemoryArenaAllocate(context->arena, sizeof(float)*values_to_plot);
+            
+            for(int i = 0; i < values_to_plot; ++i)
+            {
+                values[i] = (float)expression_result.value.as_array[i].as_f64;
+            }
+            
+            *data = values;
+            *data_count = values_to_plot;
+        }
+        
+    }
+    
+    // NOTE(rjf): Graphing data from source code.
+    else if(expression_result.value.type == CALC_TYPE_source_code_reference)
+    {
+        float *values = 0;
+        int values_to_plot = 0;
+        Fleury4GetDataFromSourceCode(context->app, context->buffer, context->text_layout_id,
+                                     expression_result.value.as_token_offset, context->arena,
+                                     &values, &values_to_plot);
+        
+        // NOTE(rjf): Plot data.
+        if(values && values_to_plot)
+        {
+            *data = values;
+            *data_count = values_to_plot;
+        }
+    }
+    
+    // NOTE(rjf): Graphing scripting functions.
+    else
+    {
+        
+    }
+    
 }
 
 static CalcInterpretResult
@@ -1555,8 +1655,8 @@ Fleury4CallCalcBuiltInFunction(CalcInterpretContext *context, CalcNode *root)
                             context->y_axis_length = 0;
                         }
                         
-                        context->y_low = (f32)low_result.value.as_f64;
-                        context->y_high = (f32)high_result.value.as_f64;
+                        context->plot_view.y0 = (f32)low_result.value.as_f64;
+                        context->plot_view.y1 = (f32)high_result.value.as_f64;
                     }
                     else
                     {
@@ -1571,8 +1671,8 @@ Fleury4CallCalcBuiltInFunction(CalcInterpretContext *context, CalcNode *root)
                             context->x_axis_length = 0;
                         }
                         
-                        context->x_low = (f32)low_result.value.as_f64;
-                        context->x_high = (f32)high_result.value.as_f64;
+                        context->plot_view.x0 = (f32)low_result.value.as_f64;
+                        context->plot_view.x1 = (f32)high_result.value.as_f64;
                     }
                 }
                 else
@@ -1620,24 +1720,39 @@ Fleury4CallCalcBuiltInFunction(CalcInterpretContext *context, CalcNode *root)
                         CalcNode *input_variable = input_find.unknown;
                         CalcInterpretGraph *new_graph =
                             (CalcInterpretGraph *)MemoryArenaAllocate(context->arena, sizeof(*new_graph));
-                        new_graph->graph_expression = graph_expression;
-                        new_graph->input_value = input_variable;
+                        
                         new_graph->next = 0;
                         new_graph->parent_call = root;
-                        new_graph->plot_title = context->plot_title;
-                        new_graph->plot_title_length = context->plot_title_length;
-                        new_graph->x_axis = context->x_axis;
-                        new_graph->x_axis_length = context->x_axis_length;
-                        new_graph->y_axis = context->y_axis;
-                        new_graph->y_axis_length = context->y_axis_length;
+                        
                         new_graph->mode = mode;
-                        new_graph->plot_view =
-                            Rf32(context->x_low, context->y_low,
-                                 context->x_high, context->y_high);
+                        new_graph->plot_title = { context->plot_title, (u64)context->plot_title_length };
+                        new_graph->x_axis = { context->x_axis, (u64)context->x_axis_length };
+                        new_graph->y_axis = { context->y_axis, (u64)context->y_axis_length };
+                        
                         new_graph->num_function_samples = context->num_function_samples;
+                        new_graph->plot_view = context->plot_view;
                         new_graph->num_bins = context->num_bins;
                         new_graph->bin_data_range.min = context->bin_range_low;
                         new_graph->bin_data_range.max = context->bin_range_high;
+                        
+                        // NOTE(rjf): Generate the plotting data.
+                        {
+                            if(mode == PLOT2D_MODE_LINE)
+                            {
+                                Fleury4GenerateLinePlotData(context, graph_expression,
+                                                            input_variable, &new_graph->x_data,
+                                                            &new_graph->y_data,
+                                                            &new_graph->data_count,
+                                                            &new_graph->style_flags);
+                            }
+                            else if(mode == PLOT2D_MODE_HISTOGRAM)
+                            {
+                                Fleury4GenerateHistogramPlotData(context, graph_expression,
+                                                            input_variable, &new_graph->data,
+                                                            &new_graph->data_count);
+                            }
+                        }
+                        
                         *target = new_graph;
                         target = &(*target)->next;
                     }
@@ -1691,6 +1806,7 @@ Fleury4InterpretCalcExpression(CalcInterpretContext *context, CalcNode *root)
             case CALC_NODE_TYPE_subtract:
             case CALC_NODE_TYPE_multiply:
             case CALC_NODE_TYPE_divide:
+            case CALC_NODE_TYPE_modulus:
             case CALC_NODE_TYPE_raise_to_power:
             {
                 CalcInterpretResult left_result = Fleury4InterpretCalcExpression(context, root->left);
@@ -1723,6 +1839,18 @@ Fleury4InterpretCalcExpression(CalcInterpretContext *context, CalcNode *root)
                         else
                         {
                             result.value = CalcValueF64(left_result.value.as_f64 / right_result.value.as_f64);
+                        }
+                        break;
+                    }
+                    case CALC_NODE_TYPE_modulus:
+                    {
+                        if(right_result.value.as_f64 == 0)
+                        {
+                            result.value = CalcValueF64(NAN);
+                        }
+                        else
+                        {
+                            result.value = CalcValueF64(fmod(left_result.value.as_f64, right_result.value.as_f64));
                         }
                         break;
                     }

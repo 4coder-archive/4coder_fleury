@@ -17,49 +17,14 @@
 #include "4coder_fleury_calc.cpp"
 
 /*c
-
 plot_function_samples(100)
-
-
-
-
 plot_title('My Plot')
 plot_xaxis('x', -4, 4)
 plot_yaxis('y', -4, 4)
 plot(x^2 * sin(time()), 4*cos(time())*sin(x*time()))
-
-
-
-
-
-
-
-
-
-
-
-
-
-plot(sin(time())*cos(x+time()), x^3 * sin(time()), sin(time())*x)
+plot(sin(time())*cos(x+time()), x^3 * sin(time()),
+sin(time())*x)
 */
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -86,8 +51,8 @@ plot(sin(time())*cos(x+time()), x^3 * sin(time()), sin(time())*x)
 
 /*c
 plot_title('Histogram')
-plot_bin_count(10)
-plot_bin_range(-40*sin(time())^2, 40*sin(time())^2)
+plot_bin_count(10+5*sin(time()))
+plot_bin_range(-40, 40)
 plot_histogram(@global_data, @global_data_2)
 */
 
@@ -197,26 +162,6 @@ plot_xaxis('x', -0.25, 1.25)
 plot_yaxis('y', -0.25, 1.25)
 plot(-2*x^3 + 3*x^2, -x^2, -x, 2*x)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 plot_title('Plotting Functions #2')
 plot_xaxis('x', -2, 2)
 plot_yaxis('y', -3, 3)
@@ -234,6 +179,49 @@ plot(1/(x), x^2, -sin(x), cos(4*x))
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*c
+t = (time()/3) % 1
+
+plot_xaxis('t', -0.25, 1.25)
+plot_yaxis('v', -0.25, 1.25)
+
+plot_title('Linear')
+transition = [ [t] [t] ]
+plot(x, transition, t)
+
+plot_title('Cubic')
+transition = [ [t] [-2*t^3+3*t^2] ]
+plot(-2*x^3+3*x^2, transition, -2*t^3+3*t^2)
+
+plot_title('Exponential')
+exp_factor = 1
+transition = [ [t] [ 1-1 * 0.5^(10*t) ] ]
+plot(1-1 * 0.5^(10*x), transition, 1-1 * 0.5^(10*t))
+*/
 
 
 
