@@ -157,6 +157,12 @@ Fleury4RenderCloseBraceAnnotation(Application_Links *app, Buffer_ID buffer, Text
             start_line.str += first_non_whitespace_offset;
             start_line.size -= first_non_whitespace_offset;
             
+            //NOTE(rjf): Special case to handle CRLF-newline files.
+            if(start_line.str[start_line.size - 1] == 13)
+            {
+                start_line.size -= 1;
+            }
+          
             u32 color = finalize_color(defcolor_comment, 0);
             color &= 0x00ffffff;
             color |= 0x80000000;
