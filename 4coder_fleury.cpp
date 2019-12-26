@@ -23,7 +23,7 @@ plot_xaxis('x', -4, 4)
 plot_yaxis('y', -4, 4)
 plot(x^2 * sin(time()), 4*cos(time())*sin(x*time()))
 plot(sin(time())*cos(x+time()), x^3 * sin(time()),
-sin(time())*x)
+sin(-time())*3*x)
 */
 
 
@@ -204,7 +204,7 @@ plot(1/(x), x^2, -sin(x), cos(4*x))
 
 
 /*c
-t = (time()/3) % 1
+t = 2 * abs((time()/8) % 1 - 0.5)
 
 plot_xaxis('t', -0.25, 1.25)
 plot_yaxis('v', -0.25, 1.25)
@@ -695,8 +695,85 @@ BUFFER_HOOK_SIG(Fleury4BeginBuffer)
 
 //~ NOTE(rjf): Layout
 
+static Layout_Item_List
+Fleury4LayoutInner(Application_Links *app, Arena *arena, Buffer_ID buffer, Range_i64 range, Face_ID face, f32 width, Layout_Virtual_Indent virt_indent){
+    Layout_Item_List list = get_empty_item_list(range);
+    
+    Scratch_Block scratch(app);
+    String_Const_u8 text = push_buffer_range(app, scratch, buffer, range);
+    
+    Face_Advance_Map advance_map = get_face_advance_map(app, face);
+    Face_Metrics metrics = get_face_metrics(app, face);
+    LefRig_TopBot_Layout_Vars pos_vars = get_lr_tb_layout_vars(&advance_map, &metrics, width);
+    
+    if (text.size == 0){
+        lr_tb_write_blank(&pos_vars, face, arena, &list, range.first);
+    }
+    else{
+        b32 skipping_leading_whitespace = (virt_indent == LayoutVirtualIndent_On);
+        Newline_Layout_Vars newline_vars = get_newline_layout_vars();
+        
+        u8 *ptr = text.str;
+        u8 *end_ptr = ptr + text.size;
+        for (;ptr < end_ptr;){
+            Character_Consume_Result consume = utf8_consume(ptr, (u64)(end_ptr - ptr));
+            
+            i64 index = layout_index_from_ptr(ptr, text.str, range.first);
+            switch (consume.codepoint){
+                case '\t':
+                case ' ':
+                {
+                    newline_layout_consume_default(&newline_vars);
+                    f32 advance = lr_tb_advance(&pos_vars, face, consume.codepoint);
+                    if (!skipping_leading_whitespace){
+                        lr_tb_write_with_advance(&pos_vars, face, advance, arena, &list, index, consume.codepoint);
+                    }
+                    else{
+                        lr_tb_advance_x_without_item(&pos_vars, advance);
+                    }
+                }break;
+                
+                default:
+                {
+                    newline_layout_consume_default(&newline_vars);
+                    lr_tb_write(&pos_vars, face, arena, &list, index, consume.codepoint);
+                }break;
+                
+                case '\r':
+                {
+                    newline_layout_consume_CR(&newline_vars, index);
+                }break;
+                
+                case '\n':
+                {
+                    i64 newline_index = newline_layout_consume_LF(&newline_vars, index);
+                    lr_tb_write_blank(&pos_vars, face, arena, &list, newline_index);
+                    lr_tb_next_line(&pos_vars);
+                }break;
+                
+                case max_u32:
+                {
+                    newline_layout_consume_default(&newline_vars);
+                    lr_tb_write_byte(&pos_vars, face, arena, &list, index, *ptr);
+                }break;
+            }
+            
+            ptr += consume.inc;
+        }
+        
+        if (newline_layout_consume_finish(&newline_vars)){
+            i64 index = layout_index_from_ptr(ptr, text.str, range.first);
+            lr_tb_write_blank(&pos_vars, face, arena, &list, index);
+        }
+    }
+    
+    layout_item_list_finish(&list, -pos_vars.line_to_text_shift);
+    
+    return(list);
+}
+
  static Layout_Item_List
 Fleury4Layout(Application_Links *app, Arena *arena, Buffer_ID buffer, Range_i64 range, Face_ID face, f32 width)
 {
-    return(layout_unwrapped__inner(app, arena, buffer, range, face, width, LayoutVirtualIndent_Off));
+    return(Fleury4LayoutInner(app, arena, buffer, range, face, width, LayoutVirtualIndent_Off));
 }

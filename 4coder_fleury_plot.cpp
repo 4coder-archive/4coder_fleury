@@ -1,6 +1,3 @@
-
-//~ NOTE(rjf): Plotting Tools
-
 static ARGB_Color global_plot_color_cycle[] =
 {
     0xff03d3fc,
@@ -16,8 +13,8 @@ enum Plot2DMode
     PLOT2D_MODE_HISTOGRAM,
 };
 
-typedef struct PlotData2D PlotData2D;
-struct PlotData2D
+typedef struct Plot2DInfo Plot2DInfo;
+struct Plot2DInfo
 {
     // NOTE(rjf): 4coder stuff.
     Application_Links *app;
@@ -53,7 +50,7 @@ enum Plot2DStyleFlags
 };
 
 static void
-Fleury4BeginPlot2D(PlotData2D *plot)
+Plot2DBegin(Plot2DInfo *plot)
 {
     Rect_f32 rect = plot->screen_rect;
     Rect_f32 plot_view = plot->plot_view;
@@ -127,7 +124,7 @@ Fleury4BeginPlot2D(PlotData2D *plot)
 }
 
 static void
-Fleury4Plot2DPoints(PlotData2D *plot, i32 style_flags,
+Plot2DPoints(Plot2DInfo *plot, i32 style_flags,
                     float *x_data, float *y_data, int data_count)
 {
     Rect_f32 rect = plot->screen_rect;
@@ -178,7 +175,7 @@ Fleury4Plot2DPoints(PlotData2D *plot, i32 style_flags,
 }
 
 static void
-Fleury4Plot2DHistogram(PlotData2D *plot, float *data, int data_count)
+Plot2DHistogram(Plot2DInfo *plot, float *data, int data_count)
 {
     if(plot->bins && plot->num_bins > 0)
     {
@@ -196,7 +193,7 @@ Fleury4Plot2DHistogram(PlotData2D *plot, float *data, int data_count)
 }
 
 static void
-Fleury4EndPlot2D(PlotData2D *plot)
+Plot2DEnd(Plot2DInfo *plot)
 {
     if(plot->mode == PLOT2D_MODE_HISTOGRAM)
     {
@@ -226,6 +223,6 @@ Fleury4EndPlot2D(PlotData2D *plot)
     }
     }
     
-    draw_rectangle_outline(plot->app, plot->screen_rect, 4.f, 3.f, fcolor_resolve(fcolor_id(defcolor_pop2)));
+    draw_rectangle_outline(plot->app, plot->screen_rect, 4.f, 3.f, fcolor_resolve(fcolor_id(defcolor_margin_active)));
     draw_set_clip(plot->app, plot->last_clip);
 }
