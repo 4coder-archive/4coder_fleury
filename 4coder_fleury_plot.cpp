@@ -18,7 +18,8 @@ struct Plot2DInfo
 {
     // NOTE(rjf): 4coder stuff.
     Application_Links *app;
-    Face_ID face_id;
+    Face_ID title_face_id;
+    Face_ID label_face_id;
     
     // NOTE(rjf): Data generic to all plots.
     Plot2DMode mode;
@@ -57,18 +58,19 @@ Plot2DBegin(Plot2DInfo *plot)
     
     if(plot->title.data)
     {
-        draw_string(plot->app, plot->face_id, plot->title, V2f32(rect.x0, rect.y0 - 20), fcolor_resolve(fcolor_id(defcolor_comment)));
+        Face_Metrics metrics = get_face_metrics(plot->app, plot->title_face_id);
+        draw_string(plot->app, plot->title_face_id, plot->title, V2f32(rect.x0, rect.y0 - metrics.line_height), fcolor_resolve(fcolor_id(defcolor_comment)));
     }
     
     if(plot->x_axis.data)
     {
-        draw_string(plot->app, plot->face_id, plot->x_axis, V2f32(rect.x0, rect.y1), fcolor_resolve(fcolor_id(defcolor_comment)));
+        draw_string(plot->app, plot->label_face_id, plot->x_axis, V2f32(rect.x0, rect.y1), fcolor_resolve(fcolor_id(defcolor_comment)));
     }
     
     if(plot->y_axis.data)
     {
-        draw_string_oriented(plot->app, plot->face_id, fcolor_resolve(fcolor_id(defcolor_comment)), plot->y_axis,
-                             V2f32(rect.x0 - 20, rect.y0 + 5), 0, V2f32(0.f, 1.f));
+        draw_string_oriented(plot->app, plot->label_face_id, fcolor_resolve(fcolor_id(defcolor_comment)), plot->y_axis,
+                             V2f32(rect.x0 - 10, rect.y0 + 5), 0, V2f32(0.f, 1.f));
     }
     
     plot->last_clip = draw_set_clip(plot->app, rect);

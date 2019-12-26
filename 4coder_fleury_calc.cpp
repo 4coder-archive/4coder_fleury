@@ -1112,7 +1112,8 @@ GraphCalcExpression(Application_Links *app, Face_ID face_id,
         plot_data.y_axis         = first_graph->y_axis;
         plot_data.screen_rect    = rect;
         plot_data.app            = app;
-        plot_data.face_id        = face_id;
+        plot_data.title_face_id  = global_styled_title_face;
+        plot_data.label_face_id  = global_styled_label_face;
         plot_data.plot_view      = plot_view;
         plot_data.num_bins       = first_graph->num_bins;
         plot_data.bin_data_range = first_graph->bin_data_range;

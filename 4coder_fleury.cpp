@@ -315,7 +315,39 @@ custom_layer_init(Application_Links *app)
     mapping_init(tctx, &framework_mapping);
     Fleury4SetBindings(&framework_mapping);
     }
-
+    
+    // NOTE(rjf): Initialize stylish fonts.
+    {
+        Scratch_Block scratch(app);
+        String_Const_u8 bin_path = system_get_path(scratch, SystemPath_Binary);
+        
+        // NOTE(rjf): Title font.
+        {
+        Face_Description desc = {0};
+        {
+                desc.font.file_name =  push_u8_stringf(scratch, "%.*sfonts/LucidaSansRegular.ttf", string_expand(bin_path));
+            desc.parameters.pt_size = 18;
+            desc.parameters.bold = 0;
+            desc.parameters.italic = 0;
+            desc.parameters.hinting = 1;
+        }
+        global_styled_title_face = try_create_new_face(app, &desc);
+        }
+        
+        // NOTE(rjf): Label font.
+        {
+            Face_Description desc = {0};
+            {
+                desc.font.file_name =  push_u8_stringf(scratch, "%.*sfonts/LucidaSansRegular.ttf", string_expand(bin_path));
+                desc.parameters.pt_size = 10;
+                desc.parameters.bold = 1;
+                desc.parameters.italic = 1;
+                desc.parameters.hinting = 1;
+            }
+            global_styled_label_face = try_create_new_face(app, &desc);
+        }
+    }
+    
     Fleury4DarkMode(app);
 }
 
