@@ -33,7 +33,7 @@ Fleury4SetBindings(Mapping *mapping)
     Bind(execute_previous_cli,          KeyCode_Z, KeyCode_Alt, KeyCode_Shift);
     Bind(command_lister,                KeyCode_X, KeyCode_Alt);
     Bind(project_command_lister,        KeyCode_X, KeyCode_Alt, KeyCode_Shift);
-    Bind(list_all_functions_current_buffer, KeyCode_I, KeyCode_Control, KeyCode_Shift);
+    Bind(list_all_functions_current_buffer_lister, KeyCode_I, KeyCode_Control, KeyCode_Shift);
     Bind(project_fkey_command, KeyCode_F1);
     Bind(project_fkey_command, KeyCode_F2);
     Bind(project_fkey_command, KeyCode_F3);
@@ -60,7 +60,9 @@ Fleury4SetBindings(Mapping *mapping)
         Bind(open_panel_hsplit, KeyCode_Minus, KeyCode_Control);
         Bind(close_panel, KeyCode_P, KeyCode_Control, KeyCode_Shift);
         Bind(fleury_toggle_colors, KeyCode_Tick, KeyCode_Control);
+        Bind(fleury_place_cursor, KeyCode_Tick, KeyCode_Alt);
         Bind(fleury_toggle_power_mode, KeyCode_P, KeyCode_Alt);
+        Bind(jump_to_definition, KeyCode_J, KeyCode_Control);
     }
     
     SelectMap(mapid_file);
@@ -104,7 +106,7 @@ Fleury4SetBindings(Mapping *mapping)
     Bind(list_all_substring_locations_case_insensitive, KeyCode_F, KeyCode_Alt);
     Bind(goto_line,                   KeyCode_G, KeyCode_Control);
     Bind(list_all_locations_of_selection,  KeyCode_G, KeyCode_Control, KeyCode_Shift);
-    Bind(snippet_lister,              KeyCode_J, KeyCode_Control);
+    // Bind(snippet_lister,              KeyCode_J, KeyCode_Control);
     Bind(kill_buffer,                 KeyCode_K, KeyCode_Control, KeyCode_Shift);
     Bind(duplicate_line,              KeyCode_L, KeyCode_Control);
     Bind(cursor_mark_swap,            KeyCode_M, KeyCode_Control);
@@ -127,6 +129,15 @@ Fleury4SetBindings(Mapping *mapping)
     Bind(if_read_only_goto_position,  KeyCode_Return);
     Bind(if_read_only_goto_position_same_panel, KeyCode_Return, KeyCode_Shift);
     Bind(view_jump_list_with_lister,  KeyCode_Period, KeyCode_Control, KeyCode_Shift);
+    
+    // NOTE(rjf): Custom bindings.
+    {
+        Bind(fleury_code_peek,          KeyCode_Alt, KeyCode_Control);
+        Bind(fleury_close_code_peek,    KeyCode_Escape);
+        Bind(fleury_code_peek_go,       KeyCode_Return, KeyCode_Control);
+        Bind(fleury_code_peek_go_same_panel, KeyCode_Return, KeyCode_Control, KeyCode_Shift);
+        Bind(fleury_write_zero_struct,  KeyCode_0, KeyCode_Control);
+    }
     
     SelectMap(mapid_code);
     ParentMap(mapid_file);
@@ -159,13 +170,5 @@ Fleury4SetBindings(Mapping *mapping)
     Bind(if0_off,                    KeyCode_I, KeyCode_Alt);
     Bind(open_file_in_quotes,        KeyCode_1, KeyCode_Alt);
     Bind(open_matching_file_cpp,     KeyCode_2, KeyCode_Alt);
-    
-    // NOTE(rjf): Custom bindings.
-    {
-        Bind(fleury_code_peek,          KeyCode_Alt, KeyCode_Control);
-        Bind(fleury_close_code_peek,    KeyCode_Escape);
-        Bind(fleury_code_peek_go,       KeyCode_Return, KeyCode_Control);
-        Bind(fleury_write_zero_struct,  KeyCode_0, KeyCode_Control);
-    }
     
 }

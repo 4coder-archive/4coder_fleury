@@ -70,7 +70,7 @@ Plot2DBegin(Plot2DInfo *plot)
     if(plot->y_axis.data)
     {
         draw_string_oriented(plot->app, plot->label_face_id, fcolor_resolve(fcolor_id(defcolor_comment)), plot->y_axis,
-                             V2f32(rect.x0 - 10, rect.y0 + 5), 0, V2f32(0.f, 1.f));
+                             V2f32(rect.x0 - 10, rect.y0 + 5), GlyphFlag_Rotate90, V2f32(0.f, 1.f));
     }
     
     plot->last_clip = draw_set_clip(plot->app, rect);
@@ -107,6 +107,16 @@ Plot2DBegin(Plot2DInfo *plot)
                 rect.y1,
             };
             draw_rectangle(plot->app, line_rect, 1.f, grid_line_color);
+            
+            char num[32] = {0};
+            String_Const_u8 str =
+            {
+                num,
+                (u64)snprintf(num, sizeof(num), "%i", (int)(x*scale_factor_x)),
+            };
+            draw_string(plot->app, plot->label_face_id, str,
+                        V2f32(rect.x0 + point_x, rect.y0 + (rect.y1-rect.y0)/2),
+                        grid_line_color);
         }
         
         for(int y = (int)(plot_view.y0 / scale_factor_y); y <= (int)(plot_view.y1 / scale_factor_y); ++y)
@@ -120,6 +130,16 @@ Plot2DBegin(Plot2DInfo *plot)
                 rect.y0 + point_y+1,
             };
             draw_rectangle(plot->app, line_rect, 1.f, grid_line_color);
+            
+            char num[32] = {0};
+            String_Const_u8 str =
+            {
+                num,
+                (u64)snprintf(num, sizeof(num), "%i", -(int)(y*scale_factor_y)),
+            };
+            draw_string(plot->app, plot->label_face_id, str,
+                        V2f32(rect.x0 + (rect.x1-rect.x0)/2, rect.y0 + point_y),
+                        grid_line_color);
         }
         
     }
@@ -127,7 +147,7 @@ Plot2DBegin(Plot2DInfo *plot)
 
 static void
 Plot2DPoints(Plot2DInfo *plot, i32 style_flags,
-                    float *x_data, float *y_data, int data_count)
+             float *x_data, float *y_data, int data_count)
 {
     Rect_f32 rect = plot->screen_rect;
     Rect_f32 plot_view = plot->plot_view;
@@ -190,7 +210,7 @@ Plot2DHistogram(Plot2DInfo *plot, float *data, int data_count)
                 ++plot->bins[bin_to_go_in + plot->current_bin_group*plot->num_bins];
             }
         }
-    ++plot->current_bin_group;
+        ++plot->current_bin_group;
     }
 }
 
@@ -212,17 +232,17 @@ Plot2DEnd(Plot2DInfo *plot)
             
             ARGB_Color color = global_plot_color_cycle[bin_group % ArrayCount(global_plot_color_cycle)];
             
-        for(int i = 0; i < plot->num_bins; ++i)
+            for(int i = 0; i < plot->num_bins; ++i)
             {
                 int bin_index = i + bin_group*plot->num_bins;
-            Rect_f32 bin_rect = {0};
-            bin_rect.x0 = plot->screen_rect.x0 + ((float)i/plot->num_bins)*(plot->screen_rect.x1-plot->screen_rect.x0) + bin_screen_width*bin_group;
+                Rect_f32 bin_rect = {0};
+                bin_rect.x0 = plot->screen_rect.x0 + ((float)i/plot->num_bins)*(plot->screen_rect.x1-plot->screen_rect.x0) + bin_screen_width*bin_group;
                 bin_rect.x1 = bin_rect.x0 + bin_screen_width;
-            bin_rect.y0 = bin_rect.y1 = plot->screen_rect.y1;
-            bin_rect.y0 -= ((float)plot->bins[bin_index] / total_data) * (plot->screen_rect.y1 - plot->screen_rect.y0);
-            draw_rectangle(plot->app, bin_rect, 4.f, color);
+                bin_rect.y0 = bin_rect.y1 = plot->screen_rect.y1;
+                bin_rect.y0 -= ((float)plot->bins[bin_index] / total_data) * (plot->screen_rect.y1 - plot->screen_rect.y0);
+                draw_rectangle(plot->app, bin_rect, 4.f, color);
+            }
         }
-    }
     }
     
     draw_rectangle_outline(plot->app, plot->screen_rect, 4.f, 3.f, fcolor_resolve(fcolor_id(defcolor_margin_active)));
