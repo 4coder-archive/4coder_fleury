@@ -16,6 +16,16 @@
 #include "4coder_fleury_plot.cpp"
 #include "4coder_fleury_calc.cpp"
 
+//~ TODO(rjf)
+//
+// [ ] Fix comment calc comment output, by interpreting entire scripts, and layouting
+//     results correctly.
+// [X] Investigate weird layout positioning issue in *calc* buffer.
+// [X] Finish *calc* buffer.
+
+
+//~
+
 /*c
 plot_function_samples(100)
 plot_title('My Plot')
@@ -357,6 +367,15 @@ custom_layer_init(Application_Links *app)
         }
     }
     
+    // NOTE(rjf): Open calc buffer.
+    {
+        Buffer_ID calc_buffer = create_buffer(app, string_u8_litexpr("*calc*"),
+                                              BufferCreate_NeverAttachToFile |
+                                              BufferCreate_AlwaysNew);
+        buffer_set_setting(app, calc_buffer, BufferSetting_Unimportant, true);
+        // (void)calc_buffer;
+    }
+    
     Fleury4DarkMode(app);
 }
 
@@ -540,6 +559,25 @@ Fleury4RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id,
             Fleury4RenderRangeHighlight(app, view_id, text_layout_id, global_code_peek_token_range);
         }
         Fleury4RenderCodePeek(app, view_id, face_id, buffer, frame_info);
+    }
+    
+    // NOTE(rjf): Update calc (once per frame).
+    {
+        static i32 last_frame_index = -1;
+        if(last_frame_index != frame_info.index)
+        {
+            CalcUpdateOncePerFrame(frame_info);
+        }
+        last_frame_index = frame_info.index;
+    }
+    
+    // NOTE(rjf): Interpret buffer as calc code, if it's the calc buffer.
+    {
+        Buffer_ID calc_buffer_id = get_buffer_by_name(app, string_u8_litexpr("*calc*"), AccessFlag_Read);
+        if(calc_buffer_id == buffer)
+        {
+            Fleury4RenderCalcBuffer(app, buffer, view_id, text_layout_id, frame_info);
+        }
     }
     
     // NOTE(rjf): Draw calc comments.

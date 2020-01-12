@@ -1,3 +1,11 @@
+static f32 global_calc_time = 0.f;
+
+static void
+CalcUpdateOncePerFrame(Frame_Info frame_info)
+{
+    global_calc_time += frame_info.literal_dt;
+}
+
 typedef enum CalcTokenType CalcTokenType;
 enum CalcTokenType
 {
@@ -61,64 +69,64 @@ GetNextCalcToken(char *buffer)
                         read_mode = READ_MODE_single_line_comment;
                     }
                 }
-            else if(buffer[i] == '@')
-            {
-                token.type = CALC_TOKEN_TYPE_source_code_identifier;
-                token.string = buffer+i+1;
-                int j;
-                for(j = i+1; buffer[j] &&
-                    (CharIsDigit(buffer[j]) || buffer[j] == '_' ||
-                     CharIsAlpha(buffer[j]));
-                    ++j);
-                token.string_length = j - i - 1;
-                break;
-            }
-            else if(CharIsAlpha(buffer[i]))
-            {
-                token.type = CALC_TOKEN_TYPE_identifier;
-                token.string = buffer+i;
-                int j;
-                for(j = i+1; buffer[j] &&
-                    (CharIsDigit(buffer[j]) || buffer[j] == '_' ||
-                     CharIsAlpha(buffer[j]));
-                    ++j);
-                token.string_length = j - i;
-                break;
-            }
-            else if(CharIsDigit(buffer[i]))
-            {
-                token.type = CALC_TOKEN_TYPE_number;
-                token.string = buffer+i;
-                int j;
-                for(j = i+1; buffer[j] &&
-                    (CharIsDigit(buffer[j]) || buffer[j] == '.' ||
-                     CharIsAlpha(buffer[j]));
-                    ++j);
-                token.string_length = j - i;
-                break;
-            }
-            else if(CharIsSymbol(buffer[i]))
-            {
-                token.type = CALC_TOKEN_TYPE_symbol;
-                token.string = buffer+i;
-                
-                // NOTE(rjf): Assumes 1-length symbols. Might not always be true.
-                int j = i+1;
-                // for(j = i+1; buffer[j] && CharIsSymbol(buffer[j]); ++j);
-                
-                token.string_length = j - i;
-                break;
-            }
-            else if(buffer[i] == '"' || buffer[i] == '\'')
-            {
-                int starting_char = buffer[i];
-                token.type = CALC_TOKEN_TYPE_string_constant;
-                token.string = buffer+i;
-                int j;
-                for(j = i+1; buffer[j] && buffer[j] != starting_char; ++j);
-                token.string_length = j - i + 1;
-                break;
-            }
+                else if(buffer[i] == '@')
+                {
+                    token.type = CALC_TOKEN_TYPE_source_code_identifier;
+                    token.string = buffer+i+1;
+                    int j;
+                    for(j = i+1; buffer[j] &&
+                        (CharIsDigit(buffer[j]) || buffer[j] == '_' ||
+                         CharIsAlpha(buffer[j]));
+                        ++j);
+                    token.string_length = j - i - 1;
+                    break;
+                }
+                else if(CharIsAlpha(buffer[i]))
+                {
+                    token.type = CALC_TOKEN_TYPE_identifier;
+                    token.string = buffer+i;
+                    int j;
+                    for(j = i+1; buffer[j] &&
+                        (CharIsDigit(buffer[j]) || buffer[j] == '_' ||
+                         CharIsAlpha(buffer[j]));
+                        ++j);
+                    token.string_length = j - i;
+                    break;
+                }
+                else if(CharIsDigit(buffer[i]))
+                {
+                    token.type = CALC_TOKEN_TYPE_number;
+                    token.string = buffer+i;
+                    int j;
+                    for(j = i+1; buffer[j] &&
+                        (CharIsDigit(buffer[j]) || buffer[j] == '.' ||
+                         CharIsAlpha(buffer[j]));
+                        ++j);
+                    token.string_length = j - i;
+                    break;
+                }
+                else if(CharIsSymbol(buffer[i]))
+                {
+                    token.type = CALC_TOKEN_TYPE_symbol;
+                    token.string = buffer+i;
+                    
+                    // NOTE(rjf): Assumes 1-length symbols. Might not always be true.
+                    int j = i+1;
+                    // for(j = i+1; buffer[j] && CharIsSymbol(buffer[j]); ++j);
+                    
+                    token.string_length = j - i;
+                    break;
+                }
+                else if(buffer[i] == '"' || buffer[i] == '\'')
+                {
+                    int starting_char = buffer[i];
+                    token.type = CALC_TOKEN_TYPE_string_constant;
+                    token.string = buffer+i;
+                    int j;
+                    for(j = i+1; buffer[j] && buffer[j] != starting_char; ++j);
+                    token.string_length = j - i + 1;
+                    break;
+                }
             }
         }
     }
@@ -230,11 +238,21 @@ RequireNewline(char **at)
     return result;
 }
 
+static int
+RequireEndOfBuffer(char **at)
+{
+    int result = 0;
+    CalcToken next_token = PeekCalcToken(at);
+    result = next_token.string == 0;
+    return result;
+}
+
 
 //~ NOTE(rjf): Calc node-types and types.
 
 #define CALC_NODE_TYPE_LIST                \
 CalcNodeType(invalid,                0)\
+CalcNodeType(error,                  0)\
 CalcNodeType(number,                 0)\
 CalcNodeType(string_constant,        0)\
 CalcNodeType(array,                  0)\
@@ -322,14 +340,39 @@ struct CalcNode
     CalcNode *next;
     CalcToken token;
     int num_params;
+    char *error_string;
+    char *at_source;
 };
 
 static CalcNode *
-AllocateCalcNode(MemoryArena *arena, CalcNodeType type)
+AllocateCalcNode(MemoryArena *arena, CalcNodeType type, char *at_source)
 {
     CalcNode *node = (CalcNode *)MemoryArenaAllocate(arena, sizeof(*node));
     MemorySet(node, 0, sizeof(*node));
     node->type = type;
+    node->at_source = at_source;
+    return node;
+}
+
+static CalcNode *
+ErrorCalcNode(MemoryArena *arena, char *format, ...)
+{
+    CalcNode *node = (CalcNode *)MemoryArenaAllocate(arena, sizeof(*node));
+    MemorySet(node, 0, sizeof(*node));
+    node->type = CALC_NODE_TYPE_error;
+    
+    va_list args;
+    va_start(args, format);
+    int required_bytes = vsnprintf(0, 0, format, args) + 1;
+    va_end(args);
+    
+    node->error_string = (char *)MemoryArenaAllocate(arena, required_bytes);
+    
+    va_start(args, format);
+    vsnprintf(node->error_string, required_bytes, format, args);
+    node->error_string[required_bytes-1] = 0;
+    va_end(args);
+    
     return node;
 }
 
@@ -342,16 +385,18 @@ ParseCalcUnaryExpression(MemoryArena *arena, char **at_ptr)
     
     CalcToken token = PeekCalcToken(at_ptr);
     
+    char *at_source = token.string;
+    
     if(CalcTokenMatch(token, "-"))
     {
         NextCalcToken(at_ptr);
-        expression = AllocateCalcNode(arena, CALC_NODE_TYPE_negate);
+        expression = AllocateCalcNode(arena, CALC_NODE_TYPE_negate, at_source);
         expression->operand = ParseCalcUnaryExpression(arena, at_ptr);
     }
     else if(token.type == CALC_TOKEN_TYPE_source_code_identifier)
     {
         NextCalcToken(at_ptr);
-        expression = AllocateCalcNode(arena, CALC_NODE_TYPE_source_code_identifier);
+        expression = AllocateCalcNode(arena, CALC_NODE_TYPE_source_code_identifier, at_source);
         expression->token = token;
     }
     else if(token.type == CALC_TOKEN_TYPE_identifier)
@@ -361,7 +406,7 @@ ParseCalcUnaryExpression(MemoryArena *arena, char **at_ptr)
         // NOTE(rjf): Function call.
         if(RequireCalcToken(at_ptr, "("))
         {
-            expression = AllocateCalcNode(arena, CALC_NODE_TYPE_function_call);
+            expression = AllocateCalcNode(arena, CALC_NODE_TYPE_function_call, at_source);
             expression->token = token;
             
             CalcNode **target_param = &expression->first_parameter;
@@ -384,14 +429,14 @@ ParseCalcUnaryExpression(MemoryArena *arena, char **at_ptr)
                 }
                 else
                 {
-                    expression = 0;
+                    expression = ErrorCalcNode(arena, "Invalid parameter.");
                     goto end_parse;
                 }
             }
             
             if(!RequireCalcToken(at_ptr, ")"))
             {
-                expression = 0;
+                expression = ErrorCalcNode(arena, "Missing ')'.");
                 goto end_parse;
             }
         }
@@ -399,7 +444,7 @@ ParseCalcUnaryExpression(MemoryArena *arena, char **at_ptr)
         // NOTE(rjf): Constant or variable.
         else
         {
-            expression = AllocateCalcNode(arena, CALC_NODE_TYPE_identifier);
+            expression = AllocateCalcNode(arena, CALC_NODE_TYPE_identifier, at_source);
             expression->token = token;
         }
     }
@@ -412,20 +457,20 @@ ParseCalcUnaryExpression(MemoryArena *arena, char **at_ptr)
     else if(token.type == CALC_TOKEN_TYPE_number)
     {
         NextCalcToken(at_ptr);
-        expression = AllocateCalcNode(arena, CALC_NODE_TYPE_number);
+        expression = AllocateCalcNode(arena, CALC_NODE_TYPE_number, at_source);
         expression->value = GetFirstDoubleFromBuffer(token.string);
     }
     else if(token.type == CALC_TOKEN_TYPE_string_constant)
     {
         NextCalcToken(at_ptr);
-        expression = AllocateCalcNode(arena, CALC_NODE_TYPE_string_constant);
+        expression = AllocateCalcNode(arena, CALC_NODE_TYPE_string_constant, at_source);
         expression->token = token;
     }
     else if(CalcTokenMatch(token, "["))
     {
         NextCalcToken(at_ptr);
         
-        expression = AllocateCalcNode(arena, CALC_NODE_TYPE_array);
+        expression = AllocateCalcNode(arena, CALC_NODE_TYPE_array, at_source);
         CalcNode **target_member = &expression->first_member;
         
         for(;;)
@@ -455,7 +500,7 @@ ParseCalcUnaryExpression(MemoryArena *arena, char **at_ptr)
     if(RequireCalcToken(at_ptr, "^"))
     {
         CalcNode *old_expr = expression;
-        expression = AllocateCalcNode(arena, CALC_NODE_TYPE_raise_to_power);
+        expression = AllocateCalcNode(arena, CALC_NODE_TYPE_raise_to_power, at_source);
         expression->left = old_expr;
         expression->right = ParseCalcUnaryExpression(arena, at_ptr);
     }
@@ -512,6 +557,8 @@ ParseCalcExpression_(MemoryArena *arena, char **at_ptr, int precedence_in)
     CalcToken token = PeekCalcToken(at_ptr);
     CalcNodeType operator_type = GetCalcBinaryOperatorTypeFromToken(token);
     
+    char *at_source = token.string;
+    
     if(token.string && operator_type != CALC_NODE_TYPE_invalid &&
        operator_type != CALC_NODE_TYPE_number)
     {
@@ -540,7 +587,7 @@ ParseCalcExpression_(MemoryArena *arena, char **at_ptr, int precedence_in)
                 
                 CalcNode *right = ParseCalcExpression_(arena, at_ptr, precedence+1);
                 CalcNode *existing_expression = expression;
-                expression = AllocateCalcNode(arena, operator_type);
+                expression = AllocateCalcNode(arena, operator_type, at_source);
                 expression->type = operator_type;
                 expression->left = existing_expression;
                 expression->right = right;
@@ -576,21 +623,36 @@ ParseCalcCode(MemoryArena *arena, char **at_ptr)
         // NOTE(rjf): Parse assignment.
         if(token.type == CALC_TOKEN_TYPE_identifier)
         {
+            char *at_source = token.string;
+            
             char *at_reset = *at_ptr;
             NextCalcToken(at_ptr);
             
             // NOTE(rjf): Variable assignment
             if(RequireCalcToken(at_ptr, "="))
             {
-                CalcNode *identifier = AllocateCalcNode(arena, CALC_NODE_TYPE_identifier);
+                CalcNode *identifier = AllocateCalcNode(arena, CALC_NODE_TYPE_identifier, at_source);
                 identifier->token = token;
                 
-                CalcNode *assignment = AllocateCalcNode(arena, CALC_NODE_TYPE_assignment);
+                CalcNode *assignment = AllocateCalcNode(arena, CALC_NODE_TYPE_assignment, at_source);
                 assignment->left = identifier;
                 assignment->right = ParseCalcExpression(arena, at_ptr);
                 
                 if(assignment == 0)
                 {
+                    break;
+                }
+                
+                if(assignment->right == 0)
+                {
+                    assignment = ErrorCalcNode(arena, "Syntax error.");
+                    *target = assignment;
+                    break;
+                }
+                else if(assignment->right->type == CALC_NODE_TYPE_error)
+                {
+                    assignment = assignment->right;
+                    *target = assignment;
                     break;
                 }
                 
@@ -618,8 +680,11 @@ ParseCalcCode(MemoryArena *arena, char **at_ptr)
         
         end_parse:;
         
-        if(!RequireCalcToken(at_ptr, ";") && !RequireNewline(at_ptr))
+        if(!RequireCalcToken(at_ptr, ";") && !RequireNewline(at_ptr) &&
+           !RequireEndOfBuffer(at_ptr))
         {
+            *target = ErrorCalcNode(arena, "Expected end-of-statement (semicolon or newline).");
+            target = &(*target)->next;
             break;
         }
     }
@@ -918,6 +983,10 @@ CalcSymbolTableLookup(CalcSymbolTable *table, char *string, int string_length)
     {
         result = value->value;
     }
+    else
+    {
+        result.type = CALC_TYPE_error;
+    }
     return result;
 }
 
@@ -950,13 +1019,13 @@ CalcSymbolTableAdd(CalcSymbolTable *table, char *string, int string_length, Calc
             }
             
             if(++hash >= table->size)
-                {
-                    hash = 0;
-                }
-                if(hash == original_hash)
-                {
-                    break;
-                }
+            {
+                hash = 0;
+            }
+            if(hash == original_hash)
+            {
+                break;
+            }
         }
         else
         {
@@ -996,13 +1065,13 @@ CalcSymbolTableRemove(CalcSymbolTable *table, char *string, int length)
             }
             
             if(++hash >= table->size)
-                {
-                    hash = 0;
-                }
-                if(hash == original_hash)
-                {
-                    break;
-                }
+            {
+                hash = 0;
+            }
+            if(hash == original_hash)
+            {
+                break;
+            }
         }
         else
         {
@@ -1013,7 +1082,7 @@ CalcSymbolTableRemove(CalcSymbolTable *table, char *string, int length)
 
 static void
 GetDataFromSourceCode(Application_Links *app, Buffer_ID buffer, Text_Layout_ID text_layout_id,
-                             i64 start_pos, MemoryArena *arena, float **data_ptr, int *data_count_ptr)
+                      i64 start_pos, MemoryArena *arena, float **data_ptr, int *data_count_ptr)
 {
     Token_Array token_array = get_token_array_from_buffer(app, buffer);
     Range_i64 visible_range = text_layout_get_visible_range(app, text_layout_id);
@@ -1091,8 +1160,8 @@ GetDataFromSourceCode(Application_Links *app, Buffer_ID buffer, Text_Layout_ID t
 
 static void
 GraphCalcExpression(Application_Links *app, Face_ID face_id,
-                           Rect_f32 rect, CalcInterpretGraph *first_graph,
-                           CalcInterpretContext *context)
+                    Rect_f32 rect, CalcInterpretGraph *first_graph,
+                    CalcInterpretContext *context)
 {
     CalcNode *parent_call = first_graph->parent_call;
     Rect_f32 plot_view = first_graph->plot_view;
@@ -1301,8 +1370,8 @@ CALC_BUILT_IN_FUNCTION(CalcTime)
 
 static void
 GenerateLinePlotData(CalcInterpretContext *context, CalcNode *expression,
-                             CalcNode *input_variable, float **x_data, float **y_data,
-                             int *data_count, i32 *style_flags_ptr)
+                     CalcNode *input_variable, float **x_data, float **y_data,
+                     int *data_count, i32 *style_flags_ptr)
 {
     CalcInterpretResult expression_result = InterpretCalcExpression(context, expression);
     
@@ -1374,8 +1443,8 @@ GenerateLinePlotData(CalcInterpretContext *context, CalcNode *expression,
         float *y_values = 0;
         int values_to_plot = 0;
         GetDataFromSourceCode(context->app, context->buffer, context->text_layout_id,
-                                     expression_result.value.as_token_offset, context->arena,
-                                     &y_values, &values_to_plot);
+                              expression_result.value.as_token_offset, context->arena,
+                              &y_values, &values_to_plot);
         
         // NOTE(rjf): Plot data.
         if(y_values && values_to_plot)
@@ -1414,8 +1483,8 @@ GenerateLinePlotData(CalcInterpretContext *context, CalcNode *expression,
         {
             for(int i = 0; i < values_to_plot; ++i)
             {
-                 double new_x_value = (context->plot_view.x0 + (i / (float)values_to_plot) *
-                                     (context->plot_view.x1 - context->plot_view.x0));
+                double new_x_value = (context->plot_view.x0 + (i / (float)values_to_plot) *
+                                      (context->plot_view.x1 - context->plot_view.x0));
                 if(symbol_value_ptr)
                 {
                     symbol_value_ptr->value.as_f64 = new_x_value;
@@ -1437,7 +1506,7 @@ GenerateLinePlotData(CalcInterpretContext *context, CalcNode *expression,
         if(input_node)
         {
             CalcSymbolTableRemove(context->symbol_table, input_node->token.string,
-                               input_node->token.string_length);
+                                  input_node->token.string_length);
         }
         
         *x_data = x_values;
@@ -1450,7 +1519,7 @@ GenerateLinePlotData(CalcInterpretContext *context, CalcNode *expression,
 
 static void
 GenerateHistogramPlotData(CalcInterpretContext *context, CalcNode *expression,
-                            CalcNode *input_variable, float **data, int *data_count)
+                          CalcNode *input_variable, float **data, int *data_count)
 {
     CalcInterpretResult expression_result = InterpretCalcExpression(context, expression);
     
@@ -1484,8 +1553,8 @@ GenerateHistogramPlotData(CalcInterpretContext *context, CalcNode *expression,
         float *values = 0;
         int values_to_plot = 0;
         GetDataFromSourceCode(context->app, context->buffer, context->text_layout_id,
-                                     expression_result.value.as_token_offset, context->arena,
-                                     &values, &values_to_plot);
+                              expression_result.value.as_token_offset, context->arena,
+                              &values, &values_to_plot);
         
         // NOTE(rjf): Plot data.
         if(values && values_to_plot)
@@ -1510,6 +1579,8 @@ CallCalcBuiltInFunction(CalcInterpretContext *context, CalcNode *root)
 #define MAX_BUILTIN_PARAM 4
     
     CalcInterpretResult result = {0};
+    
+    b32 function_valid = 0;
     
     if(!root || root->type != CALC_NODE_TYPE_function_call)
     {
@@ -1568,6 +1639,8 @@ CallCalcBuiltInFunction(CalcInterpretContext *context, CalcNode *root)
     {
         if(CalcTokenMatch(root->token, functions[i].name))
         {
+            function_valid = 1;
+            
             int param_count = 0;
             CalcInterpretResult param_results[MAX_BUILTIN_PARAM] = {0};
             for(CalcNode *param = root->first_parameter; param; param = param->next)
@@ -1617,6 +1690,7 @@ CallCalcBuiltInFunction(CalcInterpretContext *context, CalcNode *root)
             if(CalcTokenMatch(root->token, "plot_xaxis") ||
                CalcTokenMatch(root->token, "plot_yaxis"))
             {
+                function_valid = 1;
                 int is_y_axis = CalcTokenMatch(root->token, "plot_yaxis");
                 
                 result.value = CalcValueNone();
@@ -1727,6 +1801,7 @@ CallCalcBuiltInFunction(CalcInterpretContext *context, CalcNode *root)
             else if(CalcTokenMatch(root->token, "plot") ||
                     CalcTokenMatch(root->token, "plot_histogram"))
             {
+                function_valid = 1;
                 
                 struct
                 {
@@ -1755,7 +1830,7 @@ CallCalcBuiltInFunction(CalcInterpretContext *context, CalcNode *root)
                     graph_expression; graph_expression = graph_expression->next)
                 {
                     CalcFindInputResult input_find = FindUnknownForGraph(context->symbol_table,
-                                                                                graph_expression);
+                                                                         graph_expression);
                     if(input_find.number_unknowns <= 1)
                     {
                         CalcNode *input_variable = input_find.unknown;
@@ -1781,16 +1856,16 @@ CallCalcBuiltInFunction(CalcInterpretContext *context, CalcNode *root)
                             if(mode == PLOT2D_MODE_LINE)
                             {
                                 GenerateLinePlotData(context, graph_expression,
-                                                            input_variable, &new_graph->x_data,
-                                                            &new_graph->y_data,
-                                                            &new_graph->data_count,
-                                                            &new_graph->style_flags);
+                                                     input_variable, &new_graph->x_data,
+                                                     &new_graph->y_data,
+                                                     &new_graph->data_count,
+                                                     &new_graph->style_flags);
                             }
                             else if(mode == PLOT2D_MODE_HISTOGRAM)
                             {
                                 GenerateHistogramPlotData(context, graph_expression,
-                                                            input_variable, &new_graph->data,
-                                                            &new_graph->data_count);
+                                                          input_variable, &new_graph->data,
+                                                          &new_graph->data_count);
                             }
                         }
                         
@@ -1809,6 +1884,12 @@ CallCalcBuiltInFunction(CalcInterpretContext *context, CalcNode *root)
     }
     
     end_func_call:;
+    
+    if(!function_valid)
+    {
+        result.value = CalcValueError("Unknown function.");
+    }
+    
     return result;
 }
 
@@ -1819,12 +1900,18 @@ InterpretCalcExpression(CalcInterpretContext *context, CalcNode *root)
     
     if(root == 0)
     {
-        result.value = CalcValueError("something went wrong");
+        result.value = CalcValueError("Syntax error.");
     }
     else
     {
         switch(root->type)
         {
+            case CALC_NODE_TYPE_error:
+            {
+                result.value = CalcValueError(root->error_string);
+                break;
+            }
+            
             case CALC_NODE_TYPE_number:
             {
                 result.value = CalcValueF64(root->value);
@@ -1850,56 +1937,69 @@ InterpretCalcExpression(CalcInterpretContext *context, CalcNode *root)
             case CALC_NODE_TYPE_modulus:
             case CALC_NODE_TYPE_raise_to_power:
             {
-                CalcInterpretResult left_result = InterpretCalcExpression(context, root->left);
-                CalcInterpretResult right_result = InterpretCalcExpression(context, root->right);
-                if(left_result.value.type == CALC_TYPE_error ||
-                   right_result.value.type == CALC_TYPE_error)
+                if(root->left && root->right)
                 {
-                    result.value = CalcValueError(left_result.value.type == CALC_TYPE_error ? left_result.value.as_error : right_result.value.as_error);
-                    goto end_interpret;
+                    CalcInterpretResult left_result = InterpretCalcExpression(context, root->left);
+                    CalcInterpretResult right_result = InterpretCalcExpression(context, root->right);
+                    
+                    if(left_result.value.type == CALC_TYPE_error)
+                    {
+                        result = left_result;
+                        goto end_interpret;
+                    }
+                    else if(right_result.value.type == CALC_TYPE_error)
+                    {
+                        result = right_result;
+                        goto end_interpret;
+                    }
+                    
+                    else if(left_result.value.type != CALC_TYPE_number ||
+                            right_result.value.type != CALC_TYPE_number)
+                    {
+                        result.value = CalcValueError("Cannot use non-numbers in expressions.");
+                        goto end_interpret;
+                    }
+                    
+                    switch(root->type)
+                    {
+                        case CALC_NODE_TYPE_add:            result.value = CalcValueF64(left_result.value.as_f64 + right_result.value.as_f64); break;
+                        case CALC_NODE_TYPE_subtract:       result.value = CalcValueF64(left_result.value.as_f64 - right_result.value.as_f64); break;
+                        case CALC_NODE_TYPE_multiply:       result.value = CalcValueF64(left_result.value.as_f64 * right_result.value.as_f64); break;
+                        case CALC_NODE_TYPE_divide:
+                        {
+                            if(right_result.value.as_f64 == 0)
+                            {
+                                result.value = CalcValueF64(NAN);
+                            }
+                            else
+                            {
+                                result.value = CalcValueF64(left_result.value.as_f64 / right_result.value.as_f64);
+                            }
+                            break;
+                        }
+                        case CALC_NODE_TYPE_modulus:
+                        {
+                            if(right_result.value.as_f64 == 0)
+                            {
+                                result.value = CalcValueF64(NAN);
+                            }
+                            else
+                            {
+                                result.value = CalcValueF64(fmod(left_result.value.as_f64, right_result.value.as_f64));
+                            }
+                            break;
+                        }
+                        case CALC_NODE_TYPE_raise_to_power:
+                        {
+                            result.value = CalcValueF64(pow(left_result.value.as_f64, right_result.value.as_f64));
+                            break;
+                        }
+                    }
+                    
                 }
-                
-                else if(left_result.value.type != CALC_TYPE_number ||
-                        right_result.value.type != CALC_TYPE_number)
+                else
                 {
-                    result.value = CalcValueError("Cannot use non-numbers in expressions.");
-                    goto end_interpret;
-                }
-                
-                switch(root->type)
-                {
-                    case CALC_NODE_TYPE_add:            result.value = CalcValueF64(left_result.value.as_f64 + right_result.value.as_f64); break;
-                    case CALC_NODE_TYPE_subtract:       result.value = CalcValueF64(left_result.value.as_f64 - right_result.value.as_f64); break;
-                    case CALC_NODE_TYPE_multiply:       result.value = CalcValueF64(left_result.value.as_f64 * right_result.value.as_f64); break;
-                    case CALC_NODE_TYPE_divide:
-                    {
-                        if(right_result.value.as_f64 == 0)
-                        {
-                            result.value = CalcValueF64(NAN);
-                        }
-                        else
-                        {
-                            result.value = CalcValueF64(left_result.value.as_f64 / right_result.value.as_f64);
-                        }
-                        break;
-                    }
-                    case CALC_NODE_TYPE_modulus:
-                    {
-                        if(right_result.value.as_f64 == 0)
-                        {
-                            result.value = CalcValueF64(NAN);
-                        }
-                        else
-                        {
-                            result.value = CalcValueF64(fmod(left_result.value.as_f64, right_result.value.as_f64));
-                        }
-                        break;
-                    }
-                    case CALC_NODE_TYPE_raise_to_power:
-                    {
-                        result.value = CalcValueF64(pow(left_result.value.as_f64, right_result.value.as_f64));
-                        break;
-                    }
+                    result.value = CalcValueError("Binary operators require two operands.");
                 }
                 
                 break;
@@ -1934,6 +2034,10 @@ InterpretCalcExpression(CalcInterpretContext *context, CalcNode *root)
                 else
                 {
                     result.value = CalcSymbolTableLookup(context->symbol_table, root->token.string, root->token.string_length);
+                    if(result.value.type == CALC_TYPE_error)
+                    {
+                        result.value = CalcValueError(MakeCStringOnMemoryArena(context->arena, "'%.*s' is not declared.", root->token.string_length, root->token.string));
+                    }
                 }
                 
                 break;
@@ -2017,16 +2121,21 @@ IdentifierExistsInCalcExpression(CalcNode *root, char *string, int string_length
 }
 
 static CalcInterpretResult
-InterpretCalcCode(CalcInterpretContext *context, CalcNode *tree_root)
+InterpretCalcCode(CalcInterpretContext *context, CalcNode *root)
 {
     CalcInterpretResult result = {0};
     CalcInterpretResult last_result = result;
     
-    for(CalcNode *root = tree_root; root; root = root->next)
+    if(root)
     {
         last_result = result;
         
-        if(root->type == CALC_NODE_TYPE_assignment)
+        if(root->type == CALC_NODE_TYPE_error)
+        {
+            result.value = CalcValueError(root->error_string);
+            goto end_interpret;
+        }
+        else if(root->type == CALC_NODE_TYPE_assignment)
         {
             if(root->left->type == CALC_NODE_TYPE_identifier)
             {
@@ -2068,41 +2177,205 @@ InterpretCalcCode(CalcInterpretContext *context, CalcNode *tree_root)
             }
             else if(result.value.type == CALC_TYPE_error)
             {
-                break;
+                goto end_interpret;
             }
         }
     }
     
+    end_interpret:;
+    
     return result;
+}
+
+static CalcInterpretContext
+CalcInterpretContextInit(Application_Links *app, Buffer_ID buffer, Text_Layout_ID text_layout_id,
+                         MemoryArena *arena, CalcSymbolTable *symbol_table, f32 current_time)
+{
+    CalcInterpretContext context = {0};
+    context.app = app;
+    context.buffer = buffer;
+    context.text_layout_id = text_layout_id;
+    context.arena = arena;
+    context.symbol_table = symbol_table;
+    context.current_time = current_time;
+    
+    // NOTE(rjf): Default plot settings.
+    {
+        context.plot_title = "";
+        context.plot_title_length = 0;
+        context.x_axis = "x";
+        context.x_axis_length = 1;
+        context.y_axis = "y";
+        context.y_axis_length = 1;
+        context.plot_view = Rf32(-1, -1, +1, +1);
+        context.num_function_samples = 128;
+        context.num_bins = 10;
+        context.bin_range_low = -1;
+        context.bin_range_high = 1;
+    }
+    
+    return context;
+}
+
+static void
+Fleury4RenderCalcCode(Application_Links *app, Buffer_ID buffer,
+                      View_ID view, Text_Layout_ID text_layout_id,
+                      Frame_Info frame_info, MemoryArena *arena, char *code_buffer,
+                      i64 start_char_offset)
+{
+    f32 current_time = global_calc_time;
+    CalcSymbolTable symbol_table = CalcSymbolTableInit(arena, 1024);
+    CalcInterpretContext context_ = CalcInterpretContextInit(app, buffer, text_layout_id, arena,
+                                                             &symbol_table, current_time);
+    CalcInterpretContext *context = &context_;
+    
+    char *at = code_buffer;
+    CalcNode *expr = ParseCalcCode(arena, &at);
+    
+    Rect_f32 last_graph_rect = {0};
+    
+    for(CalcNode *interpret_expression = expr; interpret_expression;
+        interpret_expression = interpret_expression->next)
+    {
+        char *at_source = interpret_expression->at_source;
+        
+        // NOTE(rjf): Find starting result layout position.
+        Vec2_f32 result_layout_position = {0};
+        if(at_source)
+        {
+            i64 offset = (i64)(at_source - code_buffer);
+            for(int i = 0; at_source[i] && at_source[i] != '\n'; ++i)
+            {
+                ++offset;
+            }
+            i64 buffer_offset = start_char_offset + offset;
+            Rect_f32 last_character_rect = text_layout_character_on_screen(app, text_layout_id,
+                                                                           buffer_offset);
+            result_layout_position.x = last_character_rect.x0;
+            result_layout_position.y = last_character_rect.y0;
+            result_layout_position.x += 20;
+        }
+        
+        CalcInterpretResult result = InterpretCalcCode(context, interpret_expression);
+        
+        // NOTE(rjf): Draw result, if there's one.
+        {
+            char result_buffer[256];
+            String_Const_u8 result_string =
+            {
+                (u8 *)result_buffer,
+            };
+            
+            switch(result.value.type)
+            {
+                case CALC_TYPE_error:
+                {
+                    if(expr == 0 || !result.value.as_error)
+                    {
+                        result_string.size = (u64)snprintf(result_buffer, sizeof(result_buffer),
+                                                           "(error: Parse failure.)");
+                    }
+                    else
+                    {
+                        result_string.size = (u64)snprintf(result_buffer, sizeof(result_buffer),
+                                                           "(error: %s)", result.value.as_error);
+                    }
+                    break;
+                }
+                case CALC_TYPE_number:
+                {
+                    result_string.size = (u64)snprintf(result_buffer, sizeof(result_buffer),
+                                                       "= %f", result.value.as_f64);
+                    break;
+                }
+                case CALC_TYPE_string:
+                {
+                    result_string.size = (u64)snprintf(result_buffer, sizeof(result_buffer),
+                                                       "= %.*s", result.value.string_length, result.value.as_string);
+                    break;
+                }
+                default: break;
+            }
+            
+            Vec2_f32 point = result_layout_position;
+            
+            u32 color = finalize_color(defcolor_comment, 0);
+            color &= 0x00ffffff;
+            color |= 0x80000000;
+            draw_string(app, get_face_id(app, buffer), result_string, point, color);
+        }
+        
+        // NOTE(rjf): Draw graphs.
+        {
+            Rect_f32 view_rect = view_get_screen_rect(app, view);
+            
+            Rect_f32 graph_rect = {0};
+            {
+                graph_rect.x0 = view_rect.x1 - 30 - 300;
+                graph_rect.y0 = result_layout_position.y + 30 - 100;
+                graph_rect.x1 = graph_rect.x0 + 300;
+                graph_rect.y1 = graph_rect.y0 + 200;
+            }
+            
+            CalcNode *last_parent_call = 0;
+            for(CalcInterpretGraph *graph = result.first_graph; graph;
+                graph = graph->next)
+            {
+                if(last_parent_call == 0 || graph->parent_call != last_parent_call)
+                {
+                    if(rect_overlap(graph_rect, last_graph_rect))
+                    {
+                        graph_rect.y0 = last_graph_rect.y1 + 50;
+                        graph_rect.y1 = graph_rect.y0 + 200;
+                    }
+                    
+                    last_graph_rect = graph_rect;
+                    
+                    GraphCalcExpression(app, get_face_id(app, buffer), graph_rect, graph, context);
+                    
+                    // NOTE(rjf): Bump graph rect forward.
+                    {
+                        f32 rect_height = graph_rect.y1 - graph_rect.y0;
+                        graph_rect.y0 += rect_height + 50;
+                        graph_rect.y1 += rect_height + 50;
+                        result_layout_position.y += rect_height + 50;
+                    }
+                    
+                    last_parent_call = graph->parent_call;
+                }
+            }
+        }
+    }
+    
+}
+
+static void
+Fleury4RenderCalcBuffer(Application_Links *app, Buffer_ID buffer, View_ID view,
+                        Text_Layout_ID text_layout_id, Frame_Info frame_info)
+{
+    static char arena_buffer[64*1024*1024];
+    MemoryArena arena = MemoryArenaInit(arena_buffer, sizeof(arena_buffer));
+    Range_i64 visible_range = text_layout_get_visible_range(app, text_layout_id);
+    char *code_buffer = (char *)MemoryArenaAllocate(&arena, (u32)(visible_range.end - visible_range.start) + 1);
+    MemorySet(code_buffer, 0, (u32)(visible_range.end - visible_range.start) + 1);
+    buffer_read_range(app, buffer, visible_range, (u8 *)code_buffer);
+    Fleury4RenderCalcCode(app, buffer, view, text_layout_id, frame_info, &arena,
+                          code_buffer, visible_range.start);
 }
 
 static void
 Fleury4RenderCalcComments(Application_Links *app, Buffer_ID buffer, View_ID view,
                           Text_Layout_ID text_layout_id, Frame_Info frame_info)
 {
-    static f32 current_time = 0;
-    current_time += frame_info.literal_dt;
+    static char arena_buffer[64*1024*1024];
+    MemoryArena arena = MemoryArenaInit(arena_buffer, sizeof(arena_buffer));
     
+    Scratch_Block scratch(app);
     Token_Array token_array = get_token_array_from_buffer(app, buffer);
     Range_i64 visible_range = text_layout_get_visible_range(app, text_layout_id);
-    Scratch_Block scratch(app);
     
     if(token_array.tokens != 0)
     {
-        static char arena_buffer[64*1024*1024];
-        MemoryArena arena = MemoryArenaInit(arena_buffer, sizeof(arena_buffer));
-        CalcSymbolTable symbol_table = CalcSymbolTableInit(&arena, 1024);
-        
-        CalcInterpretContext context_ = {0};
-        CalcInterpretContext *context = &context_;
-        context->app = app;
-        context->buffer = buffer;
-        context->text_layout_id = text_layout_id;
-        context->arena = &arena;
-        context->symbol_table = &symbol_table;
-        context->num_function_samples = 128;
-        context->current_time = current_time;
-        
         i64 first_index = token_index_from_pos(&token_array, visible_range.first);
         Token_Iterator_Array it = token_iterator_index(0, &token_array, first_index);
         
@@ -2118,12 +2391,6 @@ Fleury4RenderCalcComments(Application_Links *app, Buffer_ID buffer, View_ID view
             
             if(token->kind == TokenBaseKind_Comment)
             {
-                Rect_f32 comment_first_char_rect =
-                    text_layout_character_on_screen(app, text_layout_id, token->pos);
-                
-                Rect_f32 comment_last_char_rect =
-                    text_layout_character_on_screen(app, text_layout_id, token->pos + token->size - 1);
-                
                 Range_i64 token_range =
                 {
                     token->pos,
@@ -2157,86 +2424,9 @@ Fleury4RenderCalcComments(Application_Links *app, Buffer_ID buffer, View_ID view
                     }
                     
                     char *at = (char *)token_buffer + 3;
-                    CalcNode *expr = ParseCalcCode(&arena, &at);
-                    CalcInterpretResult result = InterpretCalcCode(context, expr);
                     
-                    char result_buffer[256] = {0};
-                    String_Const_u8 result_string =
-                    {
-                        (u8 *)result_buffer,
-                    };
-                    
-                    switch(result.value.type)
-                    {
-                        case CALC_TYPE_error:
-                        {
-                            if(expr == 0)
-                            {
-                                result_string.size = (u64)snprintf(result_buffer, sizeof(result_buffer),
-                                                                   "= (syntax error: \'parse failed\')");
-                            }
-                            else
-                            {
-                                result_string.size = (u64)snprintf(result_buffer, sizeof(result_buffer),
-                                                                   "= (syntax error: \'%s\')", result.value.as_error);
-                            }
-                            break;
-                        }
-                        case CALC_TYPE_number:
-                        {
-                            result_string.size = (u64)snprintf(result_buffer, sizeof(result_buffer),
-                                                               "= %f", result.value.as_f64);
-                            break;
-                        }
-                        case CALC_TYPE_string:
-                        {
-                            result_string.size = (u64)snprintf(result_buffer, sizeof(result_buffer),
-                                                               "= '%.*s'", result.value.string_length, result.value.as_string);
-                            break;
-                        }
-                        default: break;
-                    }
-                    
-                    Vec2_f32 point =
-                    {
-                        comment_last_char_rect.x1 + 20,
-                        comment_first_char_rect.y0,
-                    };
-                    
-                    u32 color = finalize_color(defcolor_comment, 0);
-                    color &= 0x00ffffff;
-                    color |= 0x80000000;
-                    draw_string(app, get_face_id(app, buffer), result_string, point, color);
-                    
-                    Rect_f32 view_rect = view_get_screen_rect(app, view);
-                    
-                    Rect_f32 graph_rect = {0};
-                    {
-                        graph_rect.x0 = view_rect.x1 - 30 - 300;
-                        graph_rect.y0 = comment_first_char_rect.y0;
-                        graph_rect.x1 = graph_rect.x0 + 300;
-                        graph_rect.y1 = graph_rect.y0 + 200;
-                    }
-                    
-                    CalcNode *last_parent_call = 0;
-                    for(CalcInterpretGraph *graph = result.first_graph; graph;
-                        graph = graph->next)
-                    {
-                        if(last_parent_call == 0 || graph->parent_call != last_parent_call)
-                        {
-                            GraphCalcExpression(app, get_face_id(app, buffer), graph_rect, graph, context);
-                            
-                            // NOTE(rjf): Bump graph rect forward.
-                            {
-                                f32 rect_height = graph_rect.y1 - graph_rect.y0;
-                                graph_rect.y0 += rect_height + 50;
-                                graph_rect.y1 += rect_height + 50;
-                            }
-                            
-                            last_parent_call = graph->parent_call;
-                        }
-                    }
-                    
+                    Fleury4RenderCalcCode(app, buffer, view, text_layout_id, frame_info,
+                                          &arena, at, token_range.start + 3);
                 }
                 
             }
