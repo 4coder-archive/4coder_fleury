@@ -118,3 +118,29 @@ Fleury4DrawTooltipRect(Application_Links *app, Rect_f32 rect)
     draw_rectangle(app, rect, 4.f, background_color);
     draw_rectangle_outline(app, rect, 4.f, 3.f, border_color);
 }
+
+static void
+Fleury4RenderRangeHighlight(Application_Links *app, View_ID view_id, Text_Layout_ID text_layout_id,
+                            Range_i64 range)
+{
+    Rect_f32 range_start_rect = text_layout_character_on_screen(app, text_layout_id, range.start);
+    Rect_f32 range_end_rect = text_layout_character_on_screen(app, text_layout_id, range.end-1);
+    Rect_f32 total_range_rect = {0};
+    total_range_rect.x0 = MinimumF32(range_start_rect.x0, range_end_rect.x0);
+    total_range_rect.y0 = MinimumF32(range_start_rect.y0, range_end_rect.y0);
+    total_range_rect.x1 = MaximumF32(range_start_rect.x1, range_end_rect.x1);
+    total_range_rect.y1 = MaximumF32(range_start_rect.y1, range_end_rect.y1);
+    
+    ARGB_Color background_color = fcolor_resolve(fcolor_id(defcolor_pop2));
+    float background_color_r = (float)((background_color & 0x00ff0000) >> 16) / 255.f;
+    float background_color_g = (float)((background_color & 0x0000ff00) >>  8) / 255.f;
+    float background_color_b = (float)((background_color & 0x000000ff) >>  0) / 255.f;
+    background_color_r += (1.f - background_color_r) * 0.5f;
+    background_color_g += (1.f - background_color_g) * 0.5f;
+    background_color_b += (1.f - background_color_b) * 0.5f;
+    ARGB_Color highlight_color = (0x55000000 |
+                                  (((u32)(background_color_r * 255.f)) << 16) |
+                                  (((u32)(background_color_g * 255.f)) <<  8) |
+                                  (((u32)(background_color_b * 255.f)) <<  0));
+    draw_rectangle(app, total_range_rect, 4.f, highlight_color);
+}

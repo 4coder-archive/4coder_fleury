@@ -218,9 +218,9 @@ Fleury4RenderCodePeek(Application_Links *app, View_ID view_id, Face_ID face_id,
         rect.x1 = (float)((int)rect.x0 + 800);
         rect.y1 = (float)((int)rect.y0 + 600*global_code_peek_open_transition);
         
-        if(rect.x1 > global_get_screen_rectangle(app).x1)
+        if(rect.x1 > view_get_screen_rect(app, view_id).x1)
         {
-            f32 difference = rect.x1 - global_get_screen_rectangle(app).x1;
+            f32 difference = rect.x1 - view_get_screen_rect(app, view_id).x1;
             rect.x0 -= difference;
             rect.x1 -= difference;
         }

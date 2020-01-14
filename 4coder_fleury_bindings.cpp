@@ -8,7 +8,7 @@ Fleury4SetBindings(Mapping *mapping)
     SelectMapping(mapping);
     
     SelectMap(mapid_global);
-    BindCore(default_startup, CoreCode_Startup);
+    BindCore(fleury_startup, CoreCode_Startup);
     BindCore(default_try_exit, CoreCode_TryExit);
     Bind(keyboard_macro_start_recording , KeyCode_U, KeyCode_Control);
     Bind(keyboard_macro_finish_recording, KeyCode_U, KeyCode_Control, KeyCode_Shift);

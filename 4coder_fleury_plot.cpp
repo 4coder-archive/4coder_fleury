@@ -77,70 +77,102 @@ Plot2DBegin(Plot2DInfo *plot)
     draw_rectangle(plot->app, rect, 4.f, fcolor_resolve(fcolor_id(defcolor_back)));
     
     // NOTE(rjf): Draw grid lines.
+    if(plot->mode != PLOT2D_MODE_HISTOGRAM)
     {
+        Face_Metrics metrics = get_face_metrics(plot->app, plot->label_face_id);
+        
         ARGB_Color grid_line_color = fcolor_resolve(fcolor_id(defcolor_comment));
         grid_line_color &= 0x00ffffff;
         grid_line_color |= 0x91000000;
         
-        float scale_factor_x = 1.f * ((int)((plot_view.x1 - plot_view.x0) / 10.f) + 1);
-        float scale_factor_y = 1.f * ((int)((plot_view.y1 - plot_view.y0) / 10.f) + 1);
+        float tick_increment_x = (plot_view.x1 - plot_view.x0) / 10.f + 1.f;
+        float tick_increment_y = (plot_view.y1 - plot_view.y0) / 10.f + 1.f;
         
-		if(scale_factor_x <= 0)
+        tick_increment_x = powf(10.f, floorf(log10f(tick_increment_x)));
+        tick_increment_y = powf(10.f, floorf(log10f(tick_increment_y)));
+        
+		if(tick_increment_x <= 0)
 		{
-			scale_factor_x = 1;
+			tick_increment_x = 1;
 		}
-		if(scale_factor_y <= 0)
+		if(tick_increment_y <= 0)
 		{
-			scale_factor_y = 1;
+			tick_increment_y = 1;
 		}
         
-        for(int x = (int)(plot_view.x0 / scale_factor_x); x <= (int)(plot_view.x1 / scale_factor_x); ++x)
+        // NOTE(rjf): Draw vertical lines.
         {
-            f32 point_x = rect_width * ((float)x - plot_view.x0*scale_factor_x) / (plot_view.x1 - plot_view.x0)*scale_factor_x;
-            Rect_f32 line_rect =
+            for(float x = plot_view.x0 - fmodf(plot_view.x0, tick_increment_x);
+                x <= plot_view.x1; x += tick_increment_x)
             {
-                rect.x0 + point_x,
-                rect.y0,
-                rect.x0 + point_x + 1,
-                rect.y1,
-            };
-            draw_rectangle(plot->app, line_rect, 1.f, grid_line_color);
-            
-            char num[32] = {0};
-            String_Const_u8 str =
-            {
-                num,
-                (u64)snprintf(num, sizeof(num), "%i", (int)(x*scale_factor_x)),
-            };
-            draw_string(plot->app, plot->label_face_id, str,
-                        V2f32(rect.x0 + point_x, rect.y0 + (rect.y1-rect.y0)/2),
-                        grid_line_color);
+                Rect_f32 line_rect = {0};
+                {
+                    line_rect.x0 = rect.x0 + rect_width * (x - plot_view.x0) / (plot_view.x1 - plot_view.x0);
+                    line_rect.y0 = rect.y0;
+                    line_rect.x1 = line_rect.x0+1;
+                    line_rect.y1 = rect.y1;
+                }
+                
+                draw_rectangle(plot->app, line_rect, 1.f, grid_line_color);
+                
+                // NOTE(rjf): Draw number label.
+                {
+                    float nearest_y_tick = (plot_view.y1 + plot_view.y0) / 2;
+                    nearest_y_tick -= fmodf(nearest_y_tick, tick_increment_y);
+                    
+                    char num[32] = {0};
+                    String_Const_u8 str =
+                    {
+                        num,
+                        (u64)snprintf(num, sizeof(num), "%.*f", tick_increment_y >= 1 ? 0 : 3, x),
+                    };
+                    draw_string(plot->app, plot->label_face_id, str,
+                                V2f32(line_rect.x0,
+                                      rect.y0 + rect_height -
+                                      rect_height * (nearest_y_tick - plot_view.y0) / (plot_view.y1 - plot_view.y0)),
+                                grid_line_color);
+                }
+                
+            }
         }
         
-        for(int y = (int)(plot_view.y0 / scale_factor_y); y <= (int)(plot_view.y1 / scale_factor_y); ++y)
+        // NOTE(rjf): Draw horizontal lines.
         {
-            f32 point_y = rect_height * ((float)y - plot_view.y0*scale_factor_y) / (plot_view.y1 - plot_view.y0)*scale_factor_y;
-            Rect_f32 line_rect =
+            for(float y = plot_view.y0 - fmodf(plot_view.y0, tick_increment_y);
+                y <= plot_view.y1; y += tick_increment_y)
             {
-                rect.x0,
-                rect.y0 + point_y,
-                rect.x1,
-                rect.y0 + point_y+1,
-            };
-            draw_rectangle(plot->app, line_rect, 1.f, grid_line_color);
-            
-            char num[32] = {0};
-            String_Const_u8 str =
-            {
-                num,
-                (u64)snprintf(num, sizeof(num), "%i", -(int)(y*scale_factor_y)),
-            };
-            draw_string(plot->app, plot->label_face_id, str,
-                        V2f32(rect.x0 + (rect.x1-rect.x0)/2, rect.y0 + point_y),
-                        grid_line_color);
+                Rect_f32 line_rect = {0};
+                {
+                    line_rect.x0 = rect.x0;
+                    line_rect.y0 = rect.y0 + rect_height - rect_height * (y - plot_view.y0) / (plot_view.y1 - plot_view.y0);
+                    line_rect.x1 = rect.x1;
+                    line_rect.y1 = line_rect.y0+1;
+                }
+                
+                draw_rectangle(plot->app, line_rect, 1.f, grid_line_color);
+                
+                // NOTE(rjf): Draw number label.
+                {
+                    float nearest_x_tick = (plot_view.x1 + plot_view.x0) / 2;
+                    nearest_x_tick -= fmodf(nearest_x_tick, tick_increment_x);
+                    
+                    char num[32] = {0};
+                    String_Const_u8 str =
+                    {
+                        num,
+                        (u64)snprintf(num, sizeof(num), "%.*f", tick_increment_y >= 1 ? 0 : 3, y),
+                    };
+                    draw_string(plot->app, plot->label_face_id, str,
+                                V2f32(rect.x0 + rect_width * (nearest_x_tick - plot_view.x0) / (plot_view.x1 - plot_view.x0),
+                                      line_rect.y0),
+                                grid_line_color);
+                }
+                
+            }
         }
         
     }
+    
 }
 
 static void

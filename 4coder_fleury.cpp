@@ -11,6 +11,11 @@ void TestProc(int a)
     
 }
 
+#if 0
+#define TestMacro(a, b, c, d) Foo
+TestMacro(100, 200, 3, 4)
+#endif
+
 #include <stdlib.h>
 #include <string.h>
 #include "4coder_default_include.cpp"
@@ -31,6 +36,10 @@ void TestProc(int a)
 
 //~ TODO(rjf)
 //
+// [ ] Nested parentheses bug in function helper
+// [ ] Labels for histogram bins
+// [X] Make plot grid lines + tick labels not terrible
+// [X] Let function helper work without closing paren
 // [X] Fix comment calc comment output, by interpreting entire scripts, and layouting
 //     results correctly.
 // [X] Investigate weird layout positioning issue in *calc* buffer.
@@ -174,20 +183,22 @@ static float global_data_3[] =
 /*c
 plot_function_samples(100)
 
+sin2_time = sin(time()/2)^2 + 0.2
+
 plot_title('Plotting Data')
  dat = [ [ 0 1 2 3 4 5 6 7 8 9 ] [ 0 1 2 3 4 5 6 7 8 9 ] ]
-plot_xaxis('x', 0, 10)
+plot_xaxis('x', 0, 10*sin2_time)
 plot_yaxis('y', 0, 10)
 plot(dat)
 
 plot_title('Plotting Functions #1')
-plot_xaxis('x', -0.25, 1.25)
-plot_yaxis('y', -0.25, 1.25)
+plot_xaxis('x', -0.25, 1.25*sin2_time)
+plot_yaxis('y', -0.25, 1.25*sin2_time)
 plot(-2*x^3 + 3*x^2, -x^2, -x, 2*x)
 
 plot_title('Plotting Functions #2')
-plot_xaxis('x', -2, 2)
-plot_yaxis('y', -3, 3)
+plot_xaxis('x', -4*sin2_time, 2*sin2_time)
+plot_yaxis('y', -3*sin2_time, 3*sin2_time)
 plot(1/(x), x^2, -sin(x), cos(4*x))
 */
 
@@ -279,7 +290,6 @@ static Layout_Item_List Fleury4Layout(Application_Links *app, Arena *arena, Buff
 static void Fleury4RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id, Buffer_ID buffer, Text_Layout_ID text_layout_id, Rect_f32 rect, Frame_Info frame_info);
 static void Fleury4RenderRangeHighlight(Application_Links *app, View_ID view_id, Text_Layout_ID text_layout_id, Range_i64 range);
 
-
 //~ NOTE(rjf): Commands
 
 CUSTOM_COMMAND_SIG(fleury_write_text_input)
@@ -349,51 +359,6 @@ custom_layer_init(Application_Links *app)
         Fleury4SetBindings(&framework_mapping);
     }
     
-    // NOTE(rjf): Initialize stylish fonts.
-    {
-        Scratch_Block scratch(app);
-        String_Const_u8 bin_path = system_get_path(scratch, SystemPath_Binary);
-        
-        // NOTE(rjf): Title font.
-        {
-            Face_Description desc = {0};
-            {
-                desc.font.file_name =  push_u8_stringf(scratch, "%.*sfonts/RobotoCondensed-Regular.ttf", string_expand(bin_path));
-                desc.parameters.pt_size = 18;
-                desc.parameters.bold = 0;
-                desc.parameters.italic = 0;
-                desc.parameters.hinting = 1;
-            }
-            global_styled_title_face = try_create_new_face(app, &desc);
-        }
-        
-        // NOTE(rjf): Label font.
-        {
-            Face_Description desc = {0};
-            {
-                desc.font.file_name =  push_u8_stringf(scratch, "%.*sfonts/RobotoCondensed-Regular.ttf", string_expand(bin_path));
-                desc.parameters.pt_size = 10;
-                desc.parameters.bold = 1;
-                desc.parameters.italic = 1;
-                desc.parameters.hinting = 1;
-            }
-            global_styled_label_face = try_create_new_face(app, &desc);
-        }
-        
-        // NOTE(rjf): Small code font.
-        {
-            Face_Description desc = {0};
-            {
-                desc.font.file_name =  push_u8_stringf(scratch, "%.*sfonts/Inconsolata-Regular.ttf", string_expand(bin_path));
-                desc.parameters.pt_size = 12;
-                desc.parameters.bold = 1;
-                desc.parameters.italic = 1;
-                desc.parameters.hinting = 1;
-            }
-            global_small_code_face = try_create_new_face(app, &desc);
-        }
-    }
-    
     // NOTE(rjf): Open calc buffer.
     {
         Buffer_ID calc_buffer = create_buffer(app, string_u8_litexpr("*calc*"),
@@ -406,32 +371,73 @@ custom_layer_init(Application_Links *app)
     Fleury4DarkMode(app);
 }
 
-//~ NOTE(rjf): Range highlight
 
-static void
-Fleury4RenderRangeHighlight(Application_Links *app, View_ID view_id, Text_Layout_ID text_layout_id,
-                            Range_i64 range)
+//~ NOTE(rjf): Startup.
+
+CUSTOM_COMMAND_SIG(fleury_startup)
+CUSTOM_DOC("Fleury startup event")
 {
-    Rect_f32 range_start_rect = text_layout_character_on_screen(app, text_layout_id, range.start);
-    Rect_f32 range_end_rect = text_layout_character_on_screen(app, text_layout_id, range.end-1);
-    Rect_f32 total_range_rect = {0};
-    total_range_rect.x0 = MinimumF32(range_start_rect.x0, range_end_rect.x0);
-    total_range_rect.y0 = MinimumF32(range_start_rect.y0, range_end_rect.y0);
-    total_range_rect.x1 = MaximumF32(range_start_rect.x1, range_end_rect.x1);
-    total_range_rect.y1 = MaximumF32(range_start_rect.y1, range_end_rect.y1);
-    
-    ARGB_Color background_color = fcolor_resolve(fcolor_id(defcolor_pop2));
-    float background_color_r = (float)((background_color & 0x00ff0000) >> 16) / 255.f;
-    float background_color_g = (float)((background_color & 0x0000ff00) >>  8) / 255.f;
-    float background_color_b = (float)((background_color & 0x000000ff) >>  0) / 255.f;
-    background_color_r += (1.f - background_color_r) * 0.5f;
-    background_color_g += (1.f - background_color_g) * 0.5f;
-    background_color_b += (1.f - background_color_b) * 0.5f;
-    ARGB_Color highlight_color = (0x75000000 |
-                                  (((u32)(background_color_r * 255.f)) << 16) |
-                                  (((u32)(background_color_g * 255.f)) <<  8) |
-                                  (((u32)(background_color_b * 255.f)) <<  0));
-    draw_rectangle(app, total_range_rect, 4.f, highlight_color);
+    ProfileScope(app, "default startup");
+    User_Input input = get_current_input(app);
+    if(match_core_code(&input, CoreCode_Startup))
+    {
+        String_Const_u8_Array file_names = input.event.core.file_names;
+        load_themes_default_folder(app);
+        default_4coder_initialize(app, file_names);
+        default_4coder_side_by_side_panels(app, file_names);
+        if (global_config.automatically_load_project)
+        {
+            load_project(app);
+        }
+        
+        // NOTE(rjf): Initialize stylish fonts.
+        {
+            Scratch_Block scratch(app);
+            String_Const_u8 bin_path = system_get_path(scratch, SystemPath_Binary);
+            
+            // NOTE(rjf): Title font.
+            {
+                Face_Description desc = {0};
+                {
+                    desc.font.file_name =  push_u8_stringf(scratch, "%.*sfonts/RobotoCondensed-Regular.ttf", string_expand(bin_path));
+                    desc.parameters.pt_size = 18;
+                    desc.parameters.bold = 0;
+                    desc.parameters.italic = 0;
+                    desc.parameters.hinting = 1;
+                }
+                global_styled_title_face = try_create_new_face(app, &desc);
+            }
+            
+            // NOTE(rjf): Label font.
+            {
+                Face_Description desc = {0};
+                {
+                    desc.font.file_name =  push_u8_stringf(scratch, "%.*sfonts/RobotoCondensed-Regular.ttf", string_expand(bin_path));
+                    desc.parameters.pt_size = 10;
+                    desc.parameters.bold = 1;
+                    desc.parameters.italic = 1;
+                    desc.parameters.hinting = 1;
+                }
+                global_styled_label_face = try_create_new_face(app, &desc);
+            }
+            
+            // NOTE(rjf): Small code font.
+            {
+                Face_Description normal_code_desc = get_face_description(app, get_face_id(app, 0));
+                
+                Face_Description desc = {0};
+                {
+                    desc.font.file_name =  push_u8_stringf(scratch, "%.*sfonts/Inconsolata-Regular.ttf", string_expand(bin_path));
+                    desc.parameters.pt_size = normal_code_desc.parameters.pt_size - 1;
+                    desc.parameters.bold = 1;
+                    desc.parameters.italic = 1;
+                    desc.parameters.hinting = 1;
+                }
+                global_small_code_face = try_create_new_face(app, &desc);
+            }
+        }
+        
+    }
 }
 
 
@@ -522,13 +528,45 @@ Fleury4RenderErrorAnnotations(Application_Links *app, Buffer_ID buffer,
 
 //~ NOTE(rjf): Function Helper
 
+static Range_i64_Array
+Fleury4GetLeftParens(Application_Links *app, Arena *arena, Buffer_ID buffer, i64 pos, u32 flags)
+{
+    Range_i64_Array array = {};
+    i32 max = 100;
+    array.ranges = push_array(arena, Range_i64, max);
+    
+    for(;;)
+    {
+        Range_i64 range = {};
+        range.max = pos;
+        if(find_nest_side(app, buffer, pos - 1, flags | FindNest_Balanced,
+                          Scan_Backward, NestDelim_Open, &range.start))
+        {
+            array.ranges[array.count] = range;
+            array.count += 1;
+            pos = range.first;
+            if (array.count >= max)
+            {
+                break;
+            }
+        }
+        else
+        {
+            break;
+        }
+    }
+    return(array);
+}
+
 static void
-Fleury4RenderFunctionHelper(Application_Links *app, Buffer_ID buffer,
+Fleury4RenderFunctionHelper(Application_Links *app, View_ID view, Buffer_ID buffer,
                             Text_Layout_ID text_layout_id, i64 pos)
 {
     Token_Array token_array = get_token_array_from_buffer(app, buffer);
     Token_Iterator_Array it;
     Token *token = 0;
+    
+    Rect_f32 view_rect = view_get_screen_rect(app, view);
     
     Face_ID face = global_small_code_face;
     Face_Metrics metrics = get_face_metrics(app, face);
@@ -557,7 +595,7 @@ Fleury4RenderFunctionHelper(Application_Links *app, Buffer_ID buffer,
     }
     
     Scratch_Block scratch(app);
-    Range_i64_Array ranges = get_enclosure_ranges(app, scratch, buffer, pos, FindNest_Paren);
+    Range_i64_Array ranges = Fleury4GetLeftParens(app, scratch, buffer, pos, FindNest_Paren);
     
     for(int range_index = 0; range_index < ranges.count; ++range_index)
     {
@@ -566,21 +604,26 @@ Fleury4RenderFunctionHelper(Application_Links *app, Buffer_ID buffer,
         token = token_it_read(&it);
         if(token->kind == TokenBaseKind_Identifier)
         {
-            String_Const_u8 function_name = push_buffer_range(app, scratch, buffer,
-                                                              Ii64(token->pos, token->pos+token->size));
+            Range_i64 function_name_range = Ii64(token->pos, token->pos+token->size);
+            String_Const_u8 function_name = push_buffer_range(app, scratch, buffer, function_name_range);
+            
+            Fleury4RenderRangeHighlight(app, view, text_layout_id, function_name_range);
             
             // NOTE(rjf): Find active parameter.
             int active_parameter_index = 0;
-            for(;token_it_dec_non_whitespace(&it);)
             {
-                token = token_it_read(&it);
-                if(token->kind == TokenBaseKind_ParentheticalOpen)
+                it = token_iterator_pos(0, &token_array, pos);
+                for(;token_it_dec_non_whitespace(&it);)
                 {
-                    break;
-                }
-                else if(token->kind == TokenBaseKind_StatementClose)
-                {
-                    ++active_parameter_index;
+                    token = token_it_read(&it);
+                    if(token->kind == TokenBaseKind_ParentheticalOpen)
+                    {
+                        break;
+                    }
+                    else if(token->kind == TokenBaseKind_StatementClose)
+                    {
+                        ++active_parameter_index;
+                    }
                 }
             }
             
@@ -636,8 +679,20 @@ Fleury4RenderFunctionHelper(Application_Links *app, Buffer_ID buffer,
                                 }
                                 else if(token->kind == TokenBaseKind_StatementClose)
                                 {
-                                    highlight_parameter_range.max = token->pos;
-                                    ++param_index;
+                                    if(param_index == active_parameter_index)
+                                    {
+                                        highlight_parameter_range.max = token->pos;
+                                    }
+                                    
+                                    if(paren_nest == 1)
+                                    {
+                                        ++param_index;
+                                    }
+                                    
+                                    if(param_index == active_parameter_index)
+                                    {
+                                        highlight_parameter_range.min = token->pos+1;
+                                    }
                                 }
                             }
                             
@@ -679,6 +734,13 @@ Fleury4RenderFunctionHelper(Application_Links *app, Buffer_ID buffer,
                                     helper_rect.x1 += 2 * padding;
                                 }
                                 
+                                if(helper_rect.x1 > view_get_screen_rect(app, view).x1)
+                                {
+                                    f32 difference = helper_rect.x1 - view_get_screen_rect(app, view).x1;
+                                    helper_rect.x0 -= difference;
+                                    helper_rect.x1 -= difference;
+                                }
+                                
                                 Vec2_f32 text_position =
                                 {
                                     helper_rect.x0 + padding,
@@ -690,7 +752,7 @@ Fleury4RenderFunctionHelper(Application_Links *app, Buffer_ID buffer,
                                 text_position = draw_string(app, face, pre_highlight_def,
                                                             text_position, finalize_color(defcolor_comment, 0));
                                 text_position = draw_string(app, face, highlight_param,
-                                                            text_position, finalize_color(defcolor_comment_pop, 0));
+                                                            text_position, finalize_color(defcolor_comment_pop, 1));
                                 text_position = draw_string(app, face, post_highlight_def,
                                                             text_position, finalize_color(defcolor_comment, 0));
                                 
@@ -889,24 +951,27 @@ Fleury4RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id,
         Fleury4RenderPowerMode(app, view_id, face_id, frame_info);
     }
     
-    // NOTE(rjf): Draw code peek
-    if(global_code_peek_open)
-    {
-        if(buffer == global_code_peek_token_buffer)
-        {
-            Fleury4RenderRangeHighlight(app, view_id, text_layout_id, global_code_peek_token_range);
-        }
-        Fleury4RenderCodePeek(app, view_id, global_small_code_face, buffer, frame_info);
-    }
-    else
-    {
-        // NOTE(rjf): Function helper
-        {
-            Fleury4RenderFunctionHelper(app, buffer, text_layout_id, cursor_pos);
-        }
-    }
-    
     draw_set_clip(app, prev_clip);
+    
+    // NOTE(rjf): Draw tooltips and stuff.
+    if(active_view == view_id)
+    {
+        if(global_code_peek_open)
+        {
+            if(buffer == global_code_peek_token_buffer)
+            {
+                Fleury4RenderRangeHighlight(app, view_id, text_layout_id, global_code_peek_token_range);
+            }
+            Fleury4RenderCodePeek(app, view_id, global_small_code_face, buffer, frame_info);
+        }
+        else
+        {
+            // NOTE(rjf): Function helper
+            {
+                Fleury4RenderFunctionHelper(app, view_id, buffer, text_layout_id, cursor_pos);
+            }
+        }
+    }
 }
 
 //~ NOTE(rjf): Render hook
