@@ -6,7 +6,6 @@ static ARGB_Color global_plot_color_cycle[] =
     0xfff0500c,
 };
 
-typedef enum Plot2DMode Plot2DMode;
 enum Plot2DMode
 {
     PLOT2D_MODE_LINE,
@@ -43,7 +42,6 @@ struct Plot2DInfo
     int current_bin_group;
 };
 
-typedef enum Plot2DStyleFlags Plot2DStyleFlags;
 enum Plot2DStyleFlags
 {
     PLOT2D_LINES  = (1<<0),

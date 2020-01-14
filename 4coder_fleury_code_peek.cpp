@@ -213,13 +213,19 @@ Fleury4RenderCodePeek(Application_Links *app, View_ID view_id, Face_ID face_id,
         }
         
         Rect_f32 rect = {0};
-        rect.x0 = (float)((int)global_smooth_cursor_position.x + 16);
-        rect.y0 = (float)((int)global_smooth_cursor_position.y + 16);
+        rect.x0 = (float)((int)global_last_cursor_position.x + 16);
+        rect.y0 = (float)((int)global_last_cursor_position.y + 16);
         rect.x1 = (float)((int)rect.x0 + 800);
         rect.y1 = (float)((int)rect.y0 + 600*global_code_peek_open_transition);
         
-        draw_rectangle(app, rect, 4.f, fcolor_resolve(fcolor_id(defcolor_back)));
-        draw_rectangle_outline(app, rect, 4.f, 3.f, fcolor_resolve(fcolor_id(defcolor_margin_active)));
+        if(rect.x1 > global_get_screen_rectangle(app).x1)
+        {
+            f32 difference = rect.x1 - global_get_screen_rectangle(app).x1;
+            rect.x0 -= difference;
+            rect.x1 -= difference;
+        }
+        
+        Fleury4DrawTooltipRect(app, rect);
         
         //Face_Metrics metrics = get_face_metrics(app, face_id);
         

@@ -69,8 +69,8 @@ Fleury4SpawnPowerModeParticles(Application_Links *app, View_ID view)
             f32 velocity_magnitude = RandomF32(20.f, 180.f);
             f32 velocity_x = cosf(movement_angle)*velocity_magnitude;
             f32 velocity_y = sinf(movement_angle)*velocity_magnitude;
-            Fleury4Particle(global_smooth_cursor_position.x + 4 + camera.x,
-                            global_smooth_cursor_position.y + 8 + camera.y,
+            Fleury4Particle(global_cursor_position.x + 4 + camera.x,
+                            global_cursor_position.y + 8 + camera.y,
                             velocity_x, velocity_y,
                             0xffffffff,
                             RandomF32(1.5f, 8.f),

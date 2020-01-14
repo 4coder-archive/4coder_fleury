@@ -6,7 +6,6 @@ CalcUpdateOncePerFrame(Frame_Info frame_info)
     global_calc_time += frame_info.literal_dt;
 }
 
-typedef enum CalcTokenType CalcTokenType;
 enum CalcTokenType
 {
     CALC_TOKEN_TYPE_invalid,
@@ -28,7 +27,7 @@ struct CalcToken
 static CalcToken
 GetNextCalcToken(char *buffer)
 {
-    CalcToken token = {0};
+    CalcToken token = { CALC_TOKEN_TYPE_invalid };
     
     enum
     {
@@ -279,7 +278,6 @@ CalcType(source_code_reference, "source code reference")
 
 
 //~
-typedef enum CalcNodeType CalcNodeType;
 enum CalcNodeType
 {
 #define CalcNodeType(name, precedence) CALC_NODE_TYPE_##name,
@@ -299,7 +297,6 @@ CalcOperatorPrecedence(CalcNodeType type)
     return precedence_table[type];
 }
 
-typedef enum CalcType CalcType;
 enum CalcType
 {
 #define CalcType(name, str) CALC_TYPE_##name,
@@ -382,9 +379,7 @@ static CalcNode *
 ParseCalcUnaryExpression(MemoryArena *arena, char **at_ptr)
 {
     CalcNode *expression = 0;
-    
     CalcToken token = PeekCalcToken(at_ptr);
-    
     char *at_source = token.string;
     
     if(CalcTokenMatch(token, "-"))
@@ -549,58 +544,58 @@ ParseCalcExpression_(MemoryArena *arena, char **at_ptr, int precedence_in)
 {
     CalcNode *expression = ParseCalcUnaryExpression(arena, at_ptr);
     
-    if(!expression)
+    if(expression)
     {
-        goto end_parse;
-    }
-    
-    CalcToken token = PeekCalcToken(at_ptr);
-    CalcNodeType operator_type = GetCalcBinaryOperatorTypeFromToken(token);
-    
-    char *at_source = token.string;
-    
-    if(token.string && operator_type != CALC_NODE_TYPE_invalid &&
-       operator_type != CALC_NODE_TYPE_number)
-    {
-        for(int precedence = CalcOperatorPrecedence(operator_type);
-            precedence >= precedence_in;
-            --precedence)
+        CalcToken token = PeekCalcToken(at_ptr);
+        CalcNodeType operator_type = GetCalcBinaryOperatorTypeFromToken(token);
+        
+        char *at_source = token.string;
+        
+        if(token.string && operator_type != CALC_NODE_TYPE_invalid &&
+           operator_type != CALC_NODE_TYPE_number)
         {
-            for(;;)
+            for(int precedence = CalcOperatorPrecedence(operator_type);
+                precedence >= precedence_in;
+                --precedence)
             {
-                token = PeekCalcToken(at_ptr);
-                
-                operator_type = GetCalcBinaryOperatorTypeFromToken(token);
-                int operator_precedence = CalcOperatorPrecedence(operator_type);
-                
-                if(operator_precedence != precedence)
+                for(;;)
                 {
-                    break;
-                }
-                
-                if(operator_type == CALC_NODE_TYPE_invalid)
-                {
-                    break;
-                }
-                
-                NextCalcToken(at_ptr);
-                
-                CalcNode *right = ParseCalcExpression_(arena, at_ptr, precedence+1);
-                CalcNode *existing_expression = expression;
-                expression = AllocateCalcNode(arena, operator_type, at_source);
-                expression->type = operator_type;
-                expression->left = existing_expression;
-                expression->right = right;
-                
-                if(!right)
-                {
-                    goto end_parse;
+                    token = PeekCalcToken(at_ptr);
+                    
+                    operator_type = GetCalcBinaryOperatorTypeFromToken(token);
+                    int operator_precedence = CalcOperatorPrecedence(operator_type);
+                    
+                    if(operator_precedence != precedence)
+                    {
+                        break;
+                    }
+                    
+                    if(operator_type == CALC_NODE_TYPE_invalid)
+                    {
+                        break;
+                    }
+                    
+                    NextCalcToken(at_ptr);
+                    
+                    CalcNode *right = ParseCalcExpression_(arena, at_ptr, precedence+1);
+                    CalcNode *existing_expression = expression;
+                    expression = AllocateCalcNode(arena, operator_type, at_source);
+                    expression->type = operator_type;
+                    expression->left = existing_expression;
+                    expression->right = right;
+                    
+                    if(!right)
+                    {
+                        goto end_parse;
+                    }
                 }
             }
+            
+            end_parse:;
         }
     }
     
-    end_parse:;
+    
     return expression;
 }
 
@@ -1092,6 +1087,8 @@ GetDataFromSourceCode(Application_Links *app, Buffer_ID buffer, Text_Layout_ID t
         Token_Iterator_Array it = token_iterator_pos(0, &token_array, start_pos);
         Token *token = 0;
         
+        b32 found = 0;
+        
         // NOTE(rjf): Find scope open (opening brace of initializer).
         for(;;)
         {
@@ -1099,61 +1096,66 @@ GetDataFromSourceCode(Application_Links *app, Buffer_ID buffer, Text_Layout_ID t
             if(token->pos >= start_pos + 30 || !token ||
                !token_it_inc_non_whitespace(&it))
             {
-                goto end_read_data;
+                found = 0;
+                break;
             }
             
             if(token->kind == TokenBaseKind_ScopeOpen)
             {
+                found = 1;
                 break;
             }
         }
         
         // NOTE(rjf): Read data.
-        float *data = (float *)MemoryArenaAllocate(arena, 0);
-        int data_count = 0;
-        b32 is_negative = 0;
-        for(;;)
+        if(found)
         {
-            token = token_it_read(&it);
-            if(!token || !token_it_inc_non_whitespace(&it))
+            float *data = (float *)MemoryArenaAllocate(arena, 0);
+            int data_count = 0;
+            b32 is_negative = 0;
+            for(;;)
             {
-                goto end_read_data;
-            }
-            
-            if(token->kind == TokenBaseKind_Operator &&
-               token->sub_kind == TokenCppKind_Minus)
-            {
-                is_negative = 1;
-            }
-            
-            if(token->kind == TokenBaseKind_LiteralFloat ||
-               token->kind == TokenBaseKind_LiteralInteger)
-            {
-                Range_i64 token_range =
+                token = token_it_read(&it);
+                if(!token || !token_it_inc_non_whitespace(&it))
                 {
-                    token->pos,
-                    token->pos + (token->size > 256 ? 256 : token->size),
-                };
+                    goto end_read_data;
+                }
                 
-                u8 token_buffer[256];
-                buffer_read_range(app, buffer, token_range, token_buffer);
+                if(token->kind == TokenBaseKind_Operator &&
+                   token->sub_kind == TokenCppKind_Minus)
+                {
+                    is_negative = 1;
+                }
                 
-                float sign = is_negative ? -1.f : 1.f;
-                is_negative = 0;
-                
-                MemoryArenaAllocate(arena, sizeof(data[0]));
-                data[data_count++] = sign * (float)GetFirstDoubleFromBuffer((char *)token_buffer);
+                if(token->kind == TokenBaseKind_LiteralFloat ||
+                   token->kind == TokenBaseKind_LiteralInteger)
+                {
+                    Range_i64 token_range =
+                    {
+                        token->pos,
+                        token->pos + (token->size > 256 ? 256 : token->size),
+                    };
+                    
+                    u8 token_buffer[256];
+                    buffer_read_range(app, buffer, token_range, token_buffer);
+                    
+                    float sign = is_negative ? -1.f : 1.f;
+                    is_negative = 0;
+                    
+                    MemoryArenaAllocate(arena, sizeof(data[0]));
+                    data[data_count++] = sign * (float)GetFirstDoubleFromBuffer((char *)token_buffer);
+                }
+                else if(token->kind == TokenBaseKind_ScopeClose)
+                {
+                    break;
+                }
             }
-            else if(token->kind == TokenBaseKind_ScopeClose)
-            {
-                break;
-            }
+            
+            *data_ptr = data;
+            *data_count_ptr = data_count;
+            
+            end_read_data:;
         }
-        
-        *data_ptr = data;
-        *data_count_ptr = data_count;
-        
-        end_read_data:;
         
     }
 }
@@ -1714,8 +1716,8 @@ CallCalcBuiltInFunction(CalcInterpretContext *context, CalcNode *root)
                         if(title_param)
                         {
                             result.value = CalcValueError(is_y_axis
-                                                          ? "plot_yaxis only accepts one string."
-                                                          : "plot_xaxis only accepts one string.");
+                                                          ? (char *)"plot_yaxis only accepts one string."
+                                                          : (char *)"plot_xaxis only accepts one string.");
                             goto end_func_call;
                         }
                         else
@@ -1731,8 +1733,8 @@ CallCalcBuiltInFunction(CalcInterpretContext *context, CalcNode *root)
                             if(high_param)
                             {
                                 result.value = CalcValueError(is_y_axis
-                                                              ? "plot_yaxis only accepts two numbers."
-                                                              : "plot_xaxis only accepts two numbers.");
+                                                              ? (char *)"plot_yaxis only accepts two numbers."
+                                                              : (char *)"plot_xaxis only accepts two numbers.");
                                 
                                 goto end_func_call;
                             }
@@ -1793,8 +1795,8 @@ CallCalcBuiltInFunction(CalcInterpretContext *context, CalcNode *root)
                 else
                 {
                     result.value = CalcValueError(is_y_axis
-                                                  ? "plot_yaxis needs two bounds (title optional)."
-                                                  : "plot_xaxis needs two bounds (title optional).");
+                                                  ? (char *)"plot_yaxis needs two bounds (title optional)."
+                                                  : (char *)"plot_xaxis needs two bounds (title optional).");
                 }
             }
             
@@ -2023,21 +2025,10 @@ InterpretCalcExpression(CalcInterpretContext *context, CalcNode *root)
             
             case CALC_NODE_TYPE_identifier:
             {
-                if(CalcTokenMatch(root->token, "e"))
+                result.value = CalcSymbolTableLookup(context->symbol_table, root->token.string, root->token.string_length);
+                if(result.value.type == CALC_TYPE_error)
                 {
-                    result.value = CalcValueF64(2.71828);
-                }
-                else if(CalcTokenMatch(root->token, "pi"))
-                {
-                    result.value = CalcValueF64(3.1415926535897);
-                }
-                else
-                {
-                    result.value = CalcSymbolTableLookup(context->symbol_table, root->token.string, root->token.string_length);
-                    if(result.value.type == CALC_TYPE_error)
-                    {
-                        result.value = CalcValueError(MakeCStringOnMemoryArena(context->arena, "'%.*s' is not declared.", root->token.string_length, root->token.string));
-                    }
+                    result.value = CalcValueError(MakeCStringOnMemoryArena(context->arena, "'%.*s' is not declared.", root->token.string_length, root->token.string));
                 }
                 
                 break;
@@ -2225,6 +2216,22 @@ Fleury4RenderCalcCode(Application_Links *app, Buffer_ID buffer,
 {
     f32 current_time = global_calc_time;
     CalcSymbolTable symbol_table = CalcSymbolTableInit(arena, 1024);
+    
+    // NOTE(rjf): Add default symbols.
+    {
+        // NOTE(rjf): Pi
+        {
+            CalcValue value = CalcValueF64(3.1415926535897);
+            CalcSymbolTableAdd(&symbol_table, "pi", 2, value);
+        }
+        
+        // NOTE(rjf): e
+        {
+            CalcValue value = CalcValueF64(2.71828);
+            CalcSymbolTableAdd(&symbol_table, "e", 1, value);
+        }
+    }
+    
     CalcInterpretContext context_ = CalcInterpretContextInit(app, buffer, text_layout_id, arena,
                                                              &symbol_table, current_time);
     CalcInterpretContext *context = &context_;

@@ -47,7 +47,7 @@ Fleury4RenderCloseBraceAnnotation(Application_Links *app, Buffer_ID buffer, Text
 {
     Range_i64 visible_range = text_layout_get_visible_range(app, text_layout_id);
     Token_Array token_array = get_token_array_from_buffer(app, buffer);
-    Face_ID face_id = get_face_id(app, buffer);
+    Face_ID face_id = global_small_code_face;
     
     if(token_array.tokens != 0)
     {
@@ -137,8 +137,8 @@ Fleury4RenderCloseBraceAnnotation(Application_Links *app, Buffer_ID buffer, Text
         // NOTE(rjf): Draw.
         if(start_token)
         {
-            draw_string(app, face_id, string_u8_litexpr("← "), close_scope_pos, finalize_color(defcolor_comment, 0));
-            close_scope_pos.x += 32;
+            draw_string(app, face_id, string_u8_litexpr("<-"), close_scope_pos, finalize_color(defcolor_comment, 0));
+            close_scope_pos.x += 28;
             String_Const_u8 start_line = push_buffer_line(app, scratch, buffer,
                                                           get_line_number_from_pos(app, buffer, start_token->pos));
             
@@ -162,7 +162,7 @@ Fleury4RenderCloseBraceAnnotation(Application_Links *app, Buffer_ID buffer, Text
             {
                 start_line.size -= 1;
             }
-          
+            
             u32 color = finalize_color(defcolor_comment, 0);
             color &= 0x00ffffff;
             color |= 0x80000000;

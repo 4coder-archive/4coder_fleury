@@ -1,3 +1,16 @@
+
+void TestProc(int a);
+
+void Foo(void)
+{
+    TestProc(123);
+}
+
+void TestProc(int a)
+{
+    
+}
+
 #include <stdlib.h>
 #include <string.h>
 #include "4coder_default_include.cpp"
@@ -18,7 +31,7 @@
 
 //~ TODO(rjf)
 //
-// [ ] Fix comment calc comment output, by interpreting entire scripts, and layouting
+// [X] Fix comment calc comment output, by interpreting entire scripts, and layouting
 //     results correctly.
 // [X] Investigate weird layout positioning issue in *calc* buffer.
 // [X] Finish *calc* buffer.
@@ -255,11 +268,12 @@ plot(1-1 * 0.5^(10*x), transition, 1-1 * 0.5^(10*t))
 
 
 
+
+
 //~ NOTE(rjf): Hooks
 static i32  Fleury4BeginBuffer(Application_Links *app, Buffer_ID buffer_id);
 static void Fleury4Render(Application_Links *app, Frame_Info frame_info, View_ID view_id);
 static Layout_Item_List Fleury4Layout(Application_Links *app, Arena *arena, Buffer_ID buffer, Range_i64 range, Face_ID face, f32 width);
-
 
 //~ NOTE(rjf): Hook Helpers
 static void Fleury4RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id, Buffer_ID buffer, Text_Layout_ID text_layout_id, Rect_f32 rect, Frame_Info frame_info);
@@ -365,6 +379,19 @@ custom_layer_init(Application_Links *app)
             }
             global_styled_label_face = try_create_new_face(app, &desc);
         }
+        
+        // NOTE(rjf): Small code font.
+        {
+            Face_Description desc = {0};
+            {
+                desc.font.file_name =  push_u8_stringf(scratch, "%.*sfonts/Inconsolata-Regular.ttf", string_expand(bin_path));
+                desc.parameters.pt_size = 12;
+                desc.parameters.bold = 1;
+                desc.parameters.italic = 1;
+                desc.parameters.hinting = 1;
+            }
+            global_small_code_face = try_create_new_face(app, &desc);
+        }
     }
     
     // NOTE(rjf): Open calc buffer.
@@ -406,6 +433,281 @@ Fleury4RenderRangeHighlight(Application_Links *app, View_ID view_id, Text_Layout
                                   (((u32)(background_color_b * 255.f)) <<  0));
     draw_rectangle(app, total_range_rect, 4.f, highlight_color);
 }
+
+
+//~ NOTE(rjf): Error annotations
+
+static void
+Fleury4RenderErrorAnnotations(Application_Links *app, Buffer_ID buffer,
+                              Text_Layout_ID text_layout_id,
+                              Buffer_ID jump_buffer)
+{
+    Heap *heap = &global_heap;
+    Scratch_Block scratch(app);
+    Locked_Jump_State jump_state = get_locked_jump_state(app, heap);
+    
+    Face_ID face = global_small_code_face;
+    Face_Metrics metrics = get_face_metrics(app, face);
+    
+    if(jump_buffer != 0 && jump_state.view != 0)
+    {
+        Managed_Scope buffer_scopes[2] =
+        {
+            buffer_get_managed_scope(app, jump_buffer),
+            buffer_get_managed_scope(app, buffer),
+        };
+        
+        Managed_Scope comp_scope = get_managed_scope_with_multiple_dependencies(app, buffer_scopes, ArrayCount(buffer_scopes));
+        Managed_Object *buffer_markers_object = scope_attachment(app, comp_scope, sticky_jump_marker_handle, Managed_Object);
+        
+        // NOTE(rjf): Get buffer markers (locations where jumps point at).
+        i32 buffer_marker_count = 0;
+        Marker *buffer_markers = 0;
+        {
+            buffer_marker_count = managed_object_get_item_count(app, *buffer_markers_object);
+            buffer_markers = push_array(scratch, Marker, buffer_marker_count);
+            managed_object_load_data(app, *buffer_markers_object, 0, buffer_marker_count, buffer_markers);
+        }
+        
+        i64 last_line = -1;
+        
+        for(i32 i = 0; i < buffer_marker_count; i += 1)
+        {
+            i64 jump_line_number = get_line_from_list(app, jump_state.list, i);
+            i64 code_line_number = get_line_number_from_pos(app, buffer, buffer_markers[i].pos);
+            
+            if(code_line_number != last_line)
+            {
+                
+                String_Const_u8 jump_line = push_buffer_line(app, scratch, jump_buffer, jump_line_number);
+                
+                // NOTE(rjf): Remove file part of jump line.
+                {
+                    u64 index = string_find_first(jump_line, string_u8_litexpr("error"), StringMatch_CaseInsensitive);
+                    if(index == jump_line.size)
+                    {
+                        index = string_find_first(jump_line, string_u8_litexpr("warning"), StringMatch_CaseInsensitive);
+                        if(index == jump_line.size)
+                        {
+                            index = 0;
+                        }
+                    }
+                    jump_line.str += index;
+                    jump_line.size -= index;
+                }
+                
+                // NOTE(rjf): Render annotation.
+                {
+                    Range_i64 line_range = Ii64(code_line_number);
+                    Range_f32 y1 = text_layout_line_on_screen(app, text_layout_id, line_range.min);
+                    Range_f32 y2 = text_layout_line_on_screen(app, text_layout_id, line_range.max);
+                    Range_f32 y = range_union(y1, y2);
+                    if(range_size(y) > 0.f)
+                    {
+                        Rect_f32 region = text_layout_region(app, text_layout_id);
+                        draw_string(app, face, jump_line,
+                                    V2f32(region.x1 - metrics.max_advance*jump_line.size -
+                                          (y.max-y.min)/2 - metrics.line_height/2,
+                                          y.min + (y.max-y.min)/2 - metrics.line_height/2),
+                                    0xffff0000);
+                    }
+                }
+            }
+            
+            last_line = code_line_number;
+        }
+    }
+}
+
+
+//~ NOTE(rjf): Function Helper
+
+static void
+Fleury4RenderFunctionHelper(Application_Links *app, Buffer_ID buffer,
+                            Text_Layout_ID text_layout_id, i64 pos)
+{
+    Token_Array token_array = get_token_array_from_buffer(app, buffer);
+    Token_Iterator_Array it;
+    Token *token = 0;
+    
+    Face_ID face = global_small_code_face;
+    Face_Metrics metrics = get_face_metrics(app, face);
+    
+    if(token_array.tokens != 0)
+    {
+        it = token_iterator_pos(0, &token_array, pos);
+        token = token_it_read(&it);
+        
+        if(token != 0 && token->kind == TokenBaseKind_ParentheticalOpen)
+        {
+            pos = token->pos + token->size;
+        }
+        else
+        {
+            if (token_it_dec_all(&it))
+            {
+                token = token_it_read(&it);
+                if (token->kind == TokenBaseKind_ParentheticalClose &&
+                    pos == token->pos + token->size)
+                {
+                    pos = token->pos;
+                }
+            }
+        }
+    }
+    
+    Scratch_Block scratch(app);
+    Range_i64_Array ranges = get_enclosure_ranges(app, scratch, buffer, pos, FindNest_Paren);
+    
+    for(int range_index = 0; range_index < ranges.count; ++range_index)
+    {
+        it = token_iterator_pos(0, &token_array, ranges.ranges[range_index].min);
+        token_it_dec_non_whitespace(&it);
+        token = token_it_read(&it);
+        if(token->kind == TokenBaseKind_Identifier)
+        {
+            String_Const_u8 function_name = push_buffer_range(app, scratch, buffer,
+                                                              Ii64(token->pos, token->pos+token->size));
+            
+            // NOTE(rjf): Find active parameter.
+            int active_parameter_index = 0;
+            for(;token_it_dec_non_whitespace(&it);)
+            {
+                token = token_it_read(&it);
+                if(token->kind == TokenBaseKind_ParentheticalOpen)
+                {
+                    break;
+                }
+                else if(token->kind == TokenBaseKind_StatementClose)
+                {
+                    ++active_parameter_index;
+                }
+            }
+            
+            for(Buffer_ID buffer_it = get_buffer_next(app, 0, Access_Always);
+                buffer_it != 0; buffer_it = get_buffer_next(app, buffer_it, Access_Always))
+            {
+                Code_Index_File *file = code_index_get_file(buffer_it);
+                if(file != 0)
+                {
+                    for(i32 i = 0; i < file->note_array.count; i += 1)
+                    {
+                        Code_Index_Note *note = file->note_array.ptrs[i];
+                        
+                        if((note->note_kind == CodeIndexNote_Function ||
+                            note->note_kind == CodeIndexNote_Macro) &&
+                           string_match(note->text, function_name))
+                        {
+                            Range_i64 function_def_range;
+                            function_def_range.min = note->pos.min;
+                            function_def_range.max = note->pos.max;
+                            
+                            Range_i64 highlight_parameter_range = {0};
+                            
+                            Token_Array find_token_array = get_token_array_from_buffer(app, buffer_it);
+                            it = token_iterator_pos(0, &find_token_array, function_def_range.min);
+                            
+                            int paren_nest = 0;
+                            int param_index = 0;
+                            for(;token_it_inc_non_whitespace(&it);)
+                            {
+                                token = token_it_read(&it);
+                                if(token->kind == TokenBaseKind_ParentheticalOpen)
+                                {
+                                    if(++paren_nest == 1)
+                                    {
+                                        if(active_parameter_index == param_index)
+                                        {
+                                            highlight_parameter_range.min = token->pos+1;
+                                        }
+                                    }
+                                }
+                                else if(token->kind == TokenBaseKind_ParentheticalClose)
+                                {
+                                    if(!--paren_nest)
+                                    {
+                                        function_def_range.max = token->pos + token->size;
+                                        if(param_index == active_parameter_index)
+                                        {
+                                            highlight_parameter_range.max = token->pos;
+                                        }
+                                        break;
+                                    }
+                                }
+                                else if(token->kind == TokenBaseKind_StatementClose)
+                                {
+                                    highlight_parameter_range.max = token->pos;
+                                    ++param_index;
+                                }
+                            }
+                            
+                            if(highlight_parameter_range.min > function_def_range.min &&
+                               function_def_range.max > highlight_parameter_range.max)
+                            {
+                                
+                                String_Const_u8 function_def = push_buffer_range(app, scratch, buffer_it,
+                                                                                 function_def_range);
+                                String_Const_u8 highlight_param = push_buffer_range(app, scratch, buffer_it,
+                                                                                    highlight_parameter_range);
+                                
+                                String_Const_u8 pre_highlight_def =
+                                {
+                                    function_def.str,
+                                    (u64)(highlight_parameter_range.min - function_def_range.min),
+                                };
+                                
+                                String_Const_u8 post_highlight_def =
+                                {
+                                    function_def.str + highlight_parameter_range.max - function_def_range.min,
+                                    (u64)(function_def_range.max - highlight_parameter_range.max),
+                                };
+                                
+                                Rect_f32 helper_rect =
+                                {
+                                    global_cursor_position.x + 16,
+                                    global_cursor_position.y + 16,
+                                    global_cursor_position.x + 16,
+                                    global_cursor_position.y + metrics.line_height + 26,
+                                };
+                                
+                                f32 padding = (helper_rect.y1 - helper_rect.y0)/2 -
+                                    metrics.line_height/2;
+                                
+                                // NOTE(rjf): Size helper rect by how much text to draw.
+                                {
+                                    helper_rect.x1 += get_string_advance(app, face, function_def);
+                                    helper_rect.x1 += 2 * padding;
+                                }
+                                
+                                Vec2_f32 text_position =
+                                {
+                                    helper_rect.x0 + padding,
+                                    helper_rect.y0 + padding,
+                                };
+                                
+                                Fleury4DrawTooltipRect(app, helper_rect);
+                                
+                                text_position = draw_string(app, face, pre_highlight_def,
+                                                            text_position, finalize_color(defcolor_comment, 0));
+                                text_position = draw_string(app, face, highlight_param,
+                                                            text_position, finalize_color(defcolor_comment_pop, 0));
+                                text_position = draw_string(app, face, post_highlight_def,
+                                                            text_position, finalize_color(defcolor_comment, 0));
+                                
+                                goto end_lookup;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            end_lookup:;
+            break;
+        }
+    }
+}
+
+
 
 //~ NOTE(rjf): Buffer Render
 
@@ -474,6 +776,14 @@ Fleury4RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id,
                                     colors, sizeof(colors)/sizeof(colors[0]));
     }
     
+    // NOTE(allen): Line highlight
+    if(global_config.highlight_line_at_cursor && is_active_view)
+    {
+        i64 line_number = get_line_number_from_pos(app, buffer, cursor_pos);
+        draw_line_highlight(app, text_layout_id, line_number,
+                            fcolor_id(defcolor_highlight_cursor_line));
+    }
+    
     if(global_config.use_error_highlight || global_config.use_jump_highlight)
     {
         // NOTE(allen): Error highlight
@@ -497,19 +807,18 @@ Fleury4RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id,
         }
     }
     
+    // NOTE(rjf): Error annotations
+    {
+        String_Const_u8 name = string_u8_litexpr("*compilation*");
+        Buffer_ID compilation_buffer = get_buffer_by_name(app, name, Access_Always);
+        Fleury4RenderErrorAnnotations(app, buffer, text_layout_id, compilation_buffer);
+    }
+    
     // NOTE(allen): Color parens
     if(global_config.use_paren_helper)
     {
         Color_Array colors = finalize_color_array(defcolor_text_cycle);
         draw_paren_highlight(app, buffer, text_layout_id, cursor_pos, colors.vals, colors.count);
-    }
-    
-    // NOTE(allen): Line highlight
-    if(global_config.highlight_line_at_cursor && is_active_view)
-    {
-        i64 line_number = get_line_number_from_pos(app, buffer, cursor_pos);
-        draw_line_highlight(app, text_layout_id, line_number,
-                            fcolor_id(defcolor_highlight_cursor_line));
     }
     
     // NOTE(rjf): Divider Comments
@@ -551,16 +860,6 @@ Fleury4RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id,
     // NOTE(allen): put the actual text on the actual screen
     draw_text_layout_default(app, text_layout_id);
     
-    // NOTE(rjf): Draw code peek
-    if(global_code_peek_open)
-    {
-        if(buffer == global_code_peek_token_buffer)
-        {
-            Fleury4RenderRangeHighlight(app, view_id, text_layout_id, global_code_peek_token_range);
-        }
-        Fleury4RenderCodePeek(app, view_id, face_id, buffer, frame_info);
-    }
-    
     // NOTE(rjf): Update calc (once per frame).
     {
         static i32 last_frame_index = -1;
@@ -590,6 +889,23 @@ Fleury4RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id,
         Fleury4RenderPowerMode(app, view_id, face_id, frame_info);
     }
     
+    // NOTE(rjf): Draw code peek
+    if(global_code_peek_open)
+    {
+        if(buffer == global_code_peek_token_buffer)
+        {
+            Fleury4RenderRangeHighlight(app, view_id, text_layout_id, global_code_peek_token_range);
+        }
+        Fleury4RenderCodePeek(app, view_id, global_small_code_face, buffer, frame_info);
+    }
+    else
+    {
+        // NOTE(rjf): Function helper
+        {
+            Fleury4RenderFunctionHelper(app, buffer, text_layout_id, cursor_pos);
+        }
+    }
+    
     draw_set_clip(app, prev_clip);
 }
 
@@ -602,7 +918,16 @@ Fleury4Render(Application_Links *app, Frame_Info frame_info, View_ID view_id)
     View_ID active_view = get_active_view(app, Access_Always);
     b32 is_active_view = (active_view == view_id);
     
-    Rect_f32 region = draw_background_and_margin(app, view_id, is_active_view);
+    Rect_f32 view_rect = view_get_screen_rect(app, view_id);
+    Rect_f32 region = rect_inner(view_rect, 1.f);
+    
+    // NOTE(rjf): Draw background.
+    {
+        ARGB_Color color = fcolor_resolve(fcolor_id(defcolor_back));
+        draw_rectangle(app, region, 0.f, color);
+        draw_margin(app, view_rect, region, color);
+    }
+    
     Rect_f32 prev_clip = draw_set_clip(app, region);
     
     Buffer_ID buffer = view_get_buffer(app, view_id, Access_Always);

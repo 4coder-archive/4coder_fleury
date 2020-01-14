@@ -5,15 +5,7 @@ static void
 Fleury4RenderDividerComments(Application_Links *app, Buffer_ID buffer, View_ID view,
                              Text_Layout_ID text_layout_id)
 {
-    String_Const_u8 divider_comment_signifier =
-    {
-        "//~",
-        0,
-    };
-    int divider_comment_signifier_length = 0;
-    for(; divider_comment_signifier.str[divider_comment_signifier_length];
-        ++divider_comment_signifier_length);
-    divider_comment_signifier.size = divider_comment_signifier_length;
+    String_Const_u8 divider_comment_signifier = string_u8_litexpr("//~");
     
     Token_Array token_array = get_token_array_from_buffer(app, buffer);
     Range_i64 visible_range = text_layout_get_visible_range(app, text_layout_id);
@@ -42,8 +34,8 @@ Fleury4RenderDividerComments(Application_Links *app, Buffer_ID buffer, View_ID v
                 Range_i64 token_range =
                 {
                     token->pos,
-                    token->pos + (token->size > divider_comment_signifier_length
-                                  ? divider_comment_signifier_length
+                    token->pos + (token->size > (i64)divider_comment_signifier.size
+                                  ? (i64)divider_comment_signifier.size
                                   : token->size),
                 };
                 
