@@ -1,21 +1,3 @@
-
-void TestProc(int a);
-
-void Foo(void)
-{
-    TestProc(123);
-}
-
-void TestProc(int a)
-{
-    
-}
-
-#if 0
-#define TestMacro(a, b, c, d) Foo
-TestMacro(1, 2, 3, 4)
-#endif
-
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -38,7 +20,7 @@ TestMacro(1, 2, 3, 4)
 //~ TODO(rjf)
 //
 // [ ] Fix plot layout bugs when the plot call isn't in visible range
-// [ ] Nested parentheses bug in function helper
+// [X] Nested parentheses bug in function helper
 // [ ] Labels for histogram bins
 // [X] Make plot grid lines + tick labels not terrible
 // [X] Let function helper work without closing paren
@@ -59,11 +41,6 @@ plot(x^2 * sin(time()), 4*cos(time())*sin(x*time()))
 plot(sin(time())*cos(x+time()), x^3 * sin(time()),
 sin(-time())*3*x)
 */
-
-
-
-
-
 
 
 
@@ -203,18 +180,6 @@ plot_xaxis('x', -4*sin2_time, 2*sin2_time)
 plot_yaxis('y', -3*sin2_time, 3*sin2_time)
 plot(1/(x), x^2, -sin(x), cos(4*x))
 */
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -415,18 +380,6 @@ CUSTOM_DOC("Fleury startup event")
             
             // NOTE(rjf): Fallback font.
             Face_ID face_that_should_totally_be_there = get_face_id(app, 0);
-            if(0)
-            {
-                Face_Description desc = {0};
-                {
-                    desc.font.file_name =  push_u8_stringf(scratch, "%.*sfonts/Inconsolata-Regular.ttf", string_expand(bin_path));
-                    desc.parameters.pt_size = global_config.default_font_size;
-                    desc.parameters.bold = 1;
-                    desc.parameters.italic = 1;
-                    desc.parameters.hinting = global_config.default_font_hinting;
-                }
-                face_that_should_totally_be_there = try_create_new_face(app, &desc);
-            }
             
             // NOTE(rjf): Title font.
             {

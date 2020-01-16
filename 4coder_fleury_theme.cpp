@@ -14,7 +14,7 @@ Fleury4LightMode(Application_Links *app)
     
     table->arrays[defcolor_bar]                   = make_colors(arena, 0xFFd9dfe2);
     table->arrays[defcolor_base]                  = make_colors(arena, 0xff806d56);
-    table->arrays[defcolor_pop1]                  = make_colors(arena, 0xFF3C57DC);
+    table->arrays[defcolor_pop1]                  = make_colors(arena, 0xffde9343);
     table->arrays[defcolor_pop2]                  = make_colors(arena, 0xFFFF0000);
     table->arrays[defcolor_back]                  = make_colors(arena, 0xFFd9dfe2);
     table->arrays[defcolor_margin]                = make_colors(arena, 0xFFd9dfe2);
@@ -62,7 +62,7 @@ Fleury4DarkMode(Application_Links *app)
     
     table->arrays[defcolor_bar]                   = make_colors(arena, 0xFF222425);
     table->arrays[defcolor_base]                  = make_colors(arena, 0xffb99468);
-    table->arrays[defcolor_pop1]                  = make_colors(arena, 0xFF3C57DC);
+    table->arrays[defcolor_pop1]                  = make_colors(arena, 0xffde8150);
     table->arrays[defcolor_pop2]                  = make_colors(arena, 0xFFFF0000);
     table->arrays[defcolor_back]                  = make_colors(arena, 0xFF222425);
     table->arrays[defcolor_margin]                = make_colors(arena, 0xFF222425);

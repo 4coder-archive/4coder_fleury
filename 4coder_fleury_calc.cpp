@@ -2265,95 +2265,98 @@ Fleury4RenderCalcCode(Application_Links *app, Buffer_ID buffer,
         
         CalcInterpretResult result = InterpretCalcCode(context, interpret_expression);
         
-        // NOTE(rjf): Draw result, if there's one.
+        if(result_layout_position.x > 0 && result_layout_position.y > 0)
         {
-            char result_buffer[256];
-            String_Const_u8 result_string =
-            {
-                (u8 *)result_buffer,
-            };
             
-            switch(result.value.type)
+            // NOTE(rjf): Draw result, if there's one.
             {
-                case CALC_TYPE_error:
+                char result_buffer[256];
+                String_Const_u8 result_string =
                 {
-                    if(expr == 0 || !result.value.as_error)
+                    (u8 *)result_buffer,
+                };
+                
+                switch(result.value.type)
+                {
+                    case CALC_TYPE_error:
+                    {
+                        if(expr == 0 || !result.value.as_error)
+                        {
+                            result_string.size = (u64)snprintf(result_buffer, sizeof(result_buffer),
+                                                               "(error: Parse failure.)");
+                        }
+                        else
+                        {
+                            result_string.size = (u64)snprintf(result_buffer, sizeof(result_buffer),
+                                                               "(error: %s)", result.value.as_error);
+                        }
+                        break;
+                    }
+                    case CALC_TYPE_number:
                     {
                         result_string.size = (u64)snprintf(result_buffer, sizeof(result_buffer),
-                                                           "(error: Parse failure.)");
+                                                           "= %f", result.value.as_f64);
+                        break;
                     }
-                    else
+                    case CALC_TYPE_string:
                     {
                         result_string.size = (u64)snprintf(result_buffer, sizeof(result_buffer),
-                                                           "(error: %s)", result.value.as_error);
+                                                           "= %.*s", result.value.string_length, result.value.as_string);
+                        break;
                     }
-                    break;
+                    default: break;
                 }
-                case CALC_TYPE_number:
-                {
-                    result_string.size = (u64)snprintf(result_buffer, sizeof(result_buffer),
-                                                       "= %f", result.value.as_f64);
-                    break;
-                }
-                case CALC_TYPE_string:
-                {
-                    result_string.size = (u64)snprintf(result_buffer, sizeof(result_buffer),
-                                                       "= %.*s", result.value.string_length, result.value.as_string);
-                    break;
-                }
-                default: break;
+                
+                Vec2_f32 point = result_layout_position;
+                
+                u32 color = finalize_color(defcolor_comment, 0);
+                color &= 0x00ffffff;
+                color |= 0x80000000;
+                draw_string(app, get_face_id(app, buffer), result_string, point, color);
             }
             
-            Vec2_f32 point = result_layout_position;
-            
-            u32 color = finalize_color(defcolor_comment, 0);
-            color &= 0x00ffffff;
-            color |= 0x80000000;
-            draw_string(app, get_face_id(app, buffer), result_string, point, color);
-        }
-        
-        // NOTE(rjf): Draw graphs.
-        {
-            Rect_f32 view_rect = view_get_screen_rect(app, view);
-            
-            Rect_f32 graph_rect = {0};
+            // NOTE(rjf): Draw graphs.
             {
-                graph_rect.x0 = view_rect.x1 - 30 - 300;
-                graph_rect.y0 = result_layout_position.y + 30 - 100;
-                graph_rect.x1 = graph_rect.x0 + 300;
-                graph_rect.y1 = graph_rect.y0 + 200;
-            }
-            
-            CalcNode *last_parent_call = 0;
-            for(CalcInterpretGraph *graph = result.first_graph; graph;
-                graph = graph->next)
-            {
-                if(last_parent_call == 0 || graph->parent_call != last_parent_call)
+                Rect_f32 view_rect = view_get_screen_rect(app, view);
+                
+                Rect_f32 graph_rect = {0};
                 {
-                    if(rect_overlap(graph_rect, last_graph_rect))
+                    graph_rect.x0 = view_rect.x1 - 30 - 300;
+                    graph_rect.y0 = result_layout_position.y + 30 - 100;
+                    graph_rect.x1 = graph_rect.x0 + 300;
+                    graph_rect.y1 = graph_rect.y0 + 200;
+                }
+                
+                CalcNode *last_parent_call = 0;
+                for(CalcInterpretGraph *graph = result.first_graph; graph;
+                    graph = graph->next)
+                {
+                    if(last_parent_call == 0 || graph->parent_call != last_parent_call)
                     {
-                        graph_rect.y0 = last_graph_rect.y1 + 50;
-                        graph_rect.y1 = graph_rect.y0 + 200;
+                        if(last_graph_rect.x0 != 0 && rect_overlap(graph_rect, last_graph_rect))
+                        {
+                            graph_rect.y0 = last_graph_rect.y1 + 50;
+                            graph_rect.y1 = graph_rect.y0 + 200;
+                        }
+                        
+                        last_graph_rect = graph_rect;
+                        
+                        GraphCalcExpression(app, get_face_id(app, buffer), graph_rect, graph, context);
+                        
+                        // NOTE(rjf): Bump graph rect forward.
+                        {
+                            f32 rect_height = graph_rect.y1 - graph_rect.y0;
+                            graph_rect.y0 += rect_height + 50;
+                            graph_rect.y1 += rect_height + 50;
+                            result_layout_position.y += rect_height + 50;
+                        }
+                        
+                        last_parent_call = graph->parent_call;
                     }
-                    
-                    last_graph_rect = graph_rect;
-                    
-                    GraphCalcExpression(app, get_face_id(app, buffer), graph_rect, graph, context);
-                    
-                    // NOTE(rjf): Bump graph rect forward.
-                    {
-                        f32 rect_height = graph_rect.y1 - graph_rect.y0;
-                        graph_rect.y0 += rect_height + 50;
-                        graph_rect.y1 += rect_height + 50;
-                        result_layout_position.y += rect_height + 50;
-                    }
-                    
-                    last_parent_call = graph->parent_call;
                 }
             }
         }
     }
-    
 }
 
 static void

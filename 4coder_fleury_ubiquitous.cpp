@@ -5,6 +5,45 @@ static Vec2_f32 global_cursor_position = {0};
 static Vec2_f32 global_last_cursor_position = {0};
 static b32 global_dark_mode = 1;
 
+static Code_Index_Note *
+Fleury4LookUpStringInCodeIndex(Application_Links *app, String_Const_u8 string)
+{
+    Code_Index_Note *note = 0;
+    
+	if (string.str)
+	{
+		for (Buffer_ID buffer_it = get_buffer_next(app, 0, Access_Always);
+             buffer_it != 0; buffer_it = get_buffer_next(app, buffer_it, Access_Always))
+		{
+			Code_Index_File* file = code_index_get_file(buffer_it);
+			if (file != 0)
+			{
+				for (i32 i = 0; i < file->note_array.count; i += 1)
+				{
+					Code_Index_Note* this_note = file->note_array.ptrs[i];
+                    
+					if (string_match(this_note->text, string))
+					{
+						note = this_note;
+						break;
+					}
+				}
+			}
+		}
+	}
+    return note;
+}
+
+static Code_Index_Note *
+Fleury4LookUpTokenInCodeIndex(Application_Links *app, Buffer_ID buffer, Token token)
+{
+    Code_Index_Note *note = 0;
+    Scratch_Block scratch(app);
+    String_Const_u8 string = push_buffer_range(app, scratch, buffer, Ii64(token.pos, token.pos + token.size));
+    note = Fleury4LookUpStringInCodeIndex(app, string);
+    return note;
+}
+
 static ARGB_Color
 Fleury4GetCTokenColor(Token token)
 {
@@ -90,11 +129,50 @@ Fleury4DrawCTokenColors(Application_Links *app, Text_Layout_ID text_layout_id, T
     for(;;)
     {
         Token *token = token_it_read(&it);
-        if(token->pos >= visible_range.one_past_last)
+        if(!token || token->pos >= visible_range.one_past_last)
         {
             break;
         }
         ARGB_Color argb = Fleury4GetCTokenColor(*token);
+        
+        if(token->kind == TokenBaseKind_Identifier && token_it_inc_all(&it))
+        {
+            Token *second_token = token_it_read(&it);
+            token_it_dec_all(&it);
+            
+            // NOTE(rjf): Function or macro?
+            if(second_token && second_token->kind == TokenBaseKind_ParentheticalOpen &&
+               second_token->sub_kind == TokenCppKind_ParenOp)
+            {
+                argb = fcolor_resolve(fcolor_id(defcolor_pop1));
+            }
+            
+            // NOTE(rjf): Is this a type?
+            else
+            {
+                // TODO(rjf): When we can look up into the code index by table,
+                // let's totally do that here. Otherwise this is way too slow.
+#if 0
+                Buffer_ID buffer = text_layout_get_buffer(app, text_layout_id);
+                if(buffer)
+                {
+                    Code_Index_Note *note = 0;
+                    
+                    // NOTE(rjf): Look up token.
+                    {
+                        ProfileScope(app, "[Fleury] Code Index Token Look-Up");
+                        Code_Index_Note *note = Fleury4LookUpTokenInCodeIndex(app, buffer, *token);
+                    }
+                    
+                    if(note && note->note_kind == CodeIndexNote_Type)
+                    {
+                        argb = fcolor_resolve(fcolor_id(defcolor_pop2));
+                    }
+                }
+#endif
+            }
+        }
+        
         paint_text_color(app, text_layout_id, Ii64_size(token->pos, token->size), argb);
         if(!token_it_inc_all(&it))
         {
