@@ -5,6 +5,8 @@ static void
 Fleury4RenderDividerComments(Application_Links *app, Buffer_ID buffer, View_ID view,
                              Text_Layout_ID text_layout_id)
 {
+    ProfileScope(app, "[Fleury] Divider Comments");
+    
     String_Const_u8 divider_comment_signifier = string_u8_litexpr("//~");
     
     Token_Array token_array = get_token_array_from_buffer(app, buffer);

@@ -5,6 +5,8 @@ static void
 Fleury4RenderBraceHighlight(Application_Links *app, Buffer_ID buffer, Text_Layout_ID text_layout_id,
                             i64 pos, ARGB_Color *colors, i32 color_count)
 {
+    ProfileScope(app, "[Fleury] Brace Highlight");
+    
     Token_Array token_array = get_token_array_from_buffer(app, buffer);
     if (token_array.tokens != 0)
     {
@@ -45,6 +47,8 @@ static void
 Fleury4RenderCloseBraceAnnotation(Application_Links *app, Buffer_ID buffer, Text_Layout_ID text_layout_id,
                                   i64 pos)
 {
+    ProfileScope(app, "[Fleury] Brace Annotation");
+    
     Range_i64 visible_range = text_layout_get_visible_range(app, text_layout_id);
     Token_Array token_array = get_token_array_from_buffer(app, buffer);
     Face_ID face_id = global_small_code_face;
@@ -180,6 +184,8 @@ static void
 Fleury4RenderBraceLines(Application_Links *app, Buffer_ID buffer, View_ID view,
                         Text_Layout_ID text_layout_id, i64 pos)
 {
+    ProfileScope(app, "[Fleury] Brace Lines");
+    
     Face_ID face_id = get_face_id(app, buffer);
     Token_Array token_array = get_token_array_from_buffer(app, buffer);
     Range_i64 visible_range = text_layout_get_visible_range(app, text_layout_id);

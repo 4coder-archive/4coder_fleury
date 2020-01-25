@@ -137,6 +137,7 @@ Fleury4SetBindings(Mapping *mapping)
         Bind(fleury_code_peek_go,       KeyCode_Return, KeyCode_Control);
         Bind(fleury_code_peek_go_same_panel, KeyCode_Return, KeyCode_Control, KeyCode_Shift);
         Bind(fleury_write_zero_struct,  KeyCode_0, KeyCode_Control);
+        Bind(fleury_smart_replace_identifier,      KeyCode_W, KeyCode_Alt);
     }
     
     SelectMap(mapid_code);

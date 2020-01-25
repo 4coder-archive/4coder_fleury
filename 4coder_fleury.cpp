@@ -2,10 +2,10 @@
 #include <stdio.h>
 #include <string.h>
 #include "4coder_default_include.cpp"
+#include "generated/managed_id_metadata.cpp"
 
 #pragma warning(disable : 4706)
 
-#include "4coder_fleury_utilities.cpp"
 #include "4coder_fleury_ubiquitous.cpp"
 #include "4coder_fleury_power_mode.cpp"
 #include "4coder_fleury_cursor.cpp"
@@ -19,7 +19,7 @@
 
 //~ TODO(rjf)
 //
-// [ ] Fix plot layout bugs when the plot call isn't in visible range
+// [X] Fix plot layout bugs when the plot call isn't in visible range
 // [X] Nested parentheses bug in function helper
 // [ ] Labels for histogram bins
 // [X] Make plot grid lines + tick labels not terrible
@@ -219,7 +219,6 @@ transition = [ [t] [-2*t^3+3*t^2] ]
 plot(-2*x^3+3*x^2, transition, -2*t^3+3*t^2)
 
 plot_title('Exponential')
-exp_factor = 1
 transition = [ [t] [ 1-1 * 0.5^(10*t) ] ]
 plot(1-1 * 0.5^(10*x), transition, 1-1 * 0.5^(10*t))
 */
@@ -253,9 +252,10 @@ static i32  Fleury4BeginBuffer(Application_Links *app, Buffer_ID buffer_id);
 static void Fleury4Render(Application_Links *app, Frame_Info frame_info, View_ID view_id);
 static Layout_Item_List Fleury4Layout(Application_Links *app, Arena *arena, Buffer_ID buffer, Range_i64 range, Face_ID face, f32 width);
 
-//~ NOTE(rjf): Hook Helpers
+//~ NOTE(rjf): Helpers
 static void Fleury4RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id, Buffer_ID buffer, Text_Layout_ID text_layout_id, Rect_f32 rect, Frame_Info frame_info);
 static void Fleury4RenderRangeHighlight(Application_Links *app, View_ID view_id, Text_Layout_ID text_layout_id, Range_i64 range);
+static void Fleury4SmartReplaceIdentifier(Application_Links *app, String_Const_u8 needle, String_Const_u8 replace);
 
 //~ NOTE(rjf): Commands
 
@@ -295,6 +295,40 @@ CUSTOM_DOC("Places a new cursor at the current main cursor position.")
     //View_ID view = get_active_view(app, Access_ReadWriteVisible);
     //i64 current_cursor_pos = view_get_cursor_pos(app, view);
     //global_cursor_positions[global_cursor_count++] = current_cursor_pos;
+}
+
+CUSTOM_COMMAND_SIG(fleury_smart_replace_identifier)
+CUSTOM_DOC("Does a smart-replace of the identifier under the cursor")
+{
+    View_ID view = get_active_view(app, Access_ReadWriteVisible);
+    Buffer_ID buffer = view_get_buffer(app, view, Access_ReadWriteVisible);
+    
+    // NOTE(rjf): Get token from cursor.
+    Token *token = 0;
+    {
+        Token_Array token_array = get_token_array_from_buffer(app, buffer);
+        Token_Iterator_Array it = token_iterator_pos(0, &token_array, view_get_cursor_pos(app, view));
+        token = token_it_read(&it);
+    }
+    
+    // NOTE(rjf): Query user
+    if(token)
+    {
+        Scratch_Block scratch(app);
+        Query_Bar_Group group(app);
+        String_Const_u8 token_string = push_buffer_range(app, scratch, buffer,
+                                                         Ii64(token->pos, token->pos + token->size));
+        Query_Bar *with = push_array(scratch, Query_Bar, 1);
+        u8 *with_space = push_array(scratch, u8, KB(1));
+        with->prompt = push_u8_stringf(scratch, "Replace \"%.*s\" with: ", string_expand(token_string));
+        with->string = SCu8(with_space, (u64)0);
+        with->string_capacity = KB(1);
+        
+        if(query_user_string(app, with))
+        {
+            Fleury4SmartReplaceIdentifier(app, token_string, with->string);
+        }
+    }
 }
 
 //~ NOTE(rjf): Custom layer initialization
@@ -457,28 +491,46 @@ Fleury4RenderErrorAnnotations(Application_Links *app, Buffer_ID buffer,
                               Text_Layout_ID text_layout_id,
                               Buffer_ID jump_buffer)
 {
+    ProfileScope(app, "[Fleury] Error Annotations");
+    
     Heap *heap = &global_heap;
     Scratch_Block scratch(app);
-    Locked_Jump_State jump_state = get_locked_jump_state(app, heap);
+    
+    Locked_Jump_State jump_state = {};
+    {
+        ProfileScope(app, "[Fleury] Error Annotations (Get Locked Jump State)");
+        jump_state = get_locked_jump_state(app, heap);
+    }
     
     Face_ID face = global_small_code_face;
     Face_Metrics metrics = get_face_metrics(app, face);
     
     if(jump_buffer != 0 && jump_state.view != 0)
     {
-        Managed_Scope buffer_scopes[2] =
+        Managed_Scope buffer_scopes[2];
         {
-            buffer_get_managed_scope(app, jump_buffer),
-            buffer_get_managed_scope(app, buffer),
-        };
+            ProfileScope(app, "[Fleury] Error Annotations (Buffer Get Managed Scope)");
+            buffer_scopes[0] = buffer_get_managed_scope(app, jump_buffer);
+            buffer_scopes[1] = buffer_get_managed_scope(app, buffer);
+        }
         
-        Managed_Scope comp_scope = get_managed_scope_with_multiple_dependencies(app, buffer_scopes, ArrayCount(buffer_scopes));
-        Managed_Object *buffer_markers_object = scope_attachment(app, comp_scope, sticky_jump_marker_handle, Managed_Object);
+        Managed_Scope comp_scope = 0;
+        {
+            ProfileScope(app, "[Fleury] Error Annotations (Get Managed Scope)");
+            comp_scope = get_managed_scope_with_multiple_dependencies(app, buffer_scopes, ArrayCount(buffer_scopes));
+        }
+        
+        Managed_Object *buffer_markers_object = 0;
+        {
+            ProfileScope(app, "[Fleury] Error Annotations (Scope Attachment)");
+            buffer_markers_object = scope_attachment(app, comp_scope, sticky_jump_marker_handle, Managed_Object);
+        }
         
         // NOTE(rjf): Get buffer markers (locations where jumps point at).
         i32 buffer_marker_count = 0;
         Marker *buffer_markers = 0;
         {
+            ProfileScope(app, "[Fleury] Error Annotations (Load Managed Object Data)");
             buffer_marker_count = managed_object_get_item_count(app, *buffer_markers_object);
             buffer_markers = push_array(scratch, Marker, buffer_marker_count);
             managed_object_load_data(app, *buffer_markers_object, 0, buffer_marker_count, buffer_markers);
@@ -488,11 +540,14 @@ Fleury4RenderErrorAnnotations(Application_Links *app, Buffer_ID buffer,
         
         for(i32 i = 0; i < buffer_marker_count; i += 1)
         {
+            ProfileScope(app, "[Fleury] Error Annotations (Buffer Loop)");
+            
             i64 jump_line_number = get_line_from_list(app, jump_state.list, i);
             i64 code_line_number = get_line_number_from_pos(app, buffer, buffer_markers[i].pos);
             
             if(code_line_number != last_line)
             {
+                ProfileScope(app, "[Fleury] Error Annotations (Jump Line)");
                 
                 String_Const_u8 jump_line = push_buffer_line(app, scratch, jump_buffer, jump_line_number);
                 
@@ -617,6 +672,8 @@ static void
 Fleury4RenderFunctionHelper(Application_Links *app, View_ID view, Buffer_ID buffer,
                             Text_Layout_ID text_layout_id, i64 pos)
 {
+    ProfileScope(app, "[Fleury] Function Helper");
+    
     Token_Array token_array = get_token_array_from_buffer(app, buffer);
     Token_Iterator_Array it;
     Token *token = 0;
@@ -875,6 +932,325 @@ Fleury4RenderFunctionHelper(Application_Links *app, View_ID view, Buffer_ID buff
 }
 
 
+//~ NOTE(rjf): Type Helper
+
+typedef struct Declaration Declaration;
+struct Declaration
+{
+    Token *type_name;
+    Token *declaration_name;
+    int pointer_count;
+    Declaration *next;
+};
+
+static Declaration
+Fleury4FindDeclarationWithString(Application_Links *app, Buffer_ID buffer, 
+                                 Token_Iterator_Array it, Token *needle)
+{
+    Declaration declaration = {0};
+    
+    i64 pos = needle->pos;
+    
+    Scratch_Block scratch(app);
+    get_enclosure_ranges(app, scratch, buffer, pos, RangeHighlightKind_CharacterHighlight);
+    
+    String_Const_u8 needle_string =
+        push_buffer_range(app, scratch, buffer, Ii64(needle->pos,
+                                                     needle->pos +
+                                                     needle->size));
+    
+    for(;;)
+    {
+        Token *declaration_name = token_it_read(&it);
+        token_it_dec_non_whitespace(&it);
+        
+        if(declaration_name->kind == TokenBaseKind_Identifier)
+        {
+            String_Const_u8 declaration_name_string =
+                push_buffer_range(app, scratch, buffer, Ii64(declaration_name->pos,
+                                                             declaration_name->pos +
+                                                             declaration_name->size));
+            
+            if(string_match(declaration_name_string, needle_string))
+            {
+                Token *declaration_type = 0;
+                int pointer_count = 0;
+                
+                for(;;)
+                {
+                    Token *token = token_it_read(&it);
+                    token_it_dec_non_whitespace(&it);
+                    if(token->kind == TokenBaseKind_Identifier)
+                    {
+                        declaration_type = token;
+                        break;
+                    }
+                    else if(token->kind == TokenBaseKind_Operator &&
+                            token->kind == TokenCppKind_Star)
+                    {
+                        ++pointer_count;
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+                
+                if(declaration_name && pointer_count >= 0)
+                {
+                    declaration.type_name = declaration_type;
+                    declaration.declaration_name = declaration_name;
+                    declaration.pointer_count = pointer_count;
+                    declaration.next = 0;
+                    break;
+                }
+            }
+        }
+    }
+    
+    return declaration;
+}
+
+static Declaration *
+Fleury4ParseDeclarationList(Application_Links *app, Arena *arena, Buffer_ID buffer, i64 pos)
+{
+    Declaration *head = 0;
+    Declaration **target = &head;
+    
+    Token_Array token_array = get_token_array_from_buffer(app, buffer);
+    Token_Iterator_Array it = token_iterator_pos(0, &token_array, pos);
+    
+    int scope_nest = 0;
+    
+    for(;;)
+    {
+        Token *type_name = token_it_read(&it);
+        token_it_inc_non_whitespace(&it);
+        
+        if(type_name == 0)
+        {
+            break;
+        }
+        
+        if(type_name->kind == TokenBaseKind_ScopeOpen)
+        {
+            ++scope_nest;
+        }
+        else if(type_name->kind == TokenBaseKind_ScopeClose)
+        {
+            if(--scope_nest <= 0)
+            {
+                break;
+            }
+        }
+        else if((type_name->kind == TokenBaseKind_Identifier || 
+			     type_name->kind == TokenBaseKind_Keyword) &&
+                scope_nest == 1)
+        {
+            Token *declaration_name = 0;
+            int pointer_count = 0;
+            
+            for(;;)
+            {
+                Token *token = token_it_read(&it);
+                token_it_inc_non_whitespace(&it);
+                
+                if(token == 0 || token->kind == 0)
+                {
+                    break;
+                }
+                
+                if(token->kind == TokenBaseKind_Operator &&
+                   token->sub_kind == TokenCppKind_Star)
+                {
+                    ++pointer_count;
+                }
+                else if(token->kind == TokenBaseKind_Identifier)
+                {
+                    declaration_name = token;
+                    break;
+                }
+                else
+                {
+                    break;
+                }
+            }
+            
+            if(declaration_name)
+            {
+                Declaration *decl = push_array(arena, Declaration, 1);
+                decl->type_name = type_name;
+                decl->pointer_count = pointer_count;
+                decl->declaration_name = declaration_name;
+				decl->next = 0;
+                
+                *target = decl;
+                target = &(*target)->next;
+            }
+        }
+    }
+    
+    return head;
+}
+
+static void
+Fleury4RenderTypeHelper(Application_Links *app, Buffer_ID buffer, i64 pos)
+{
+    Scratch_Block scratch(app);
+    
+    Token_Array token_array = get_token_array_from_buffer(app, buffer);
+    Token_Iterator_Array it = token_iterator_pos(0, &token_array, pos);
+    token_it_dec_non_whitespace(&it);
+    Token *token = token_it_read(&it);
+    
+    if(token && token->kind == TokenBaseKind_Identifier)
+    {
+        token_it_dec_non_whitespace(&it);
+        token = token_it_read(&it);
+    }
+    
+    if(token && token->kind == TokenBaseKind_Operator &&
+       (token->sub_kind == TokenCppKind_Dot ||
+        token->sub_kind == TokenCppKind_Arrow))
+    {
+        token_it_dec_non_whitespace(&it);
+        token = token_it_read(&it);
+    }
+    
+    if(token && token->kind == TokenBaseKind_Identifier)
+    {
+        token_it_dec_non_whitespace(&it);
+        Declaration declaration = Fleury4FindDeclarationWithString(app, buffer, it, token);
+        
+        if(declaration.type_name)
+        {
+            Code_Index_Note *type_note =
+                Fleury4LookUpTokenInCodeIndex(app, buffer, *declaration.type_name);
+            
+            if(type_note && type_note->note_kind == CodeIndexNote_Type)
+            {
+                Buffer_ID note_buffer = type_note->file->buffer;
+                Declaration *type_declarations =
+                    Fleury4ParseDeclarationList(app, scratch, note_buffer, type_note->pos.start);
+                
+                Face_ID face = global_small_code_face;
+                Face_Metrics metrics = get_face_metrics(app, face);
+                
+                Rect_f32 tooltip_rect =
+                {
+                    global_cursor_position.x + 16,
+                    global_cursor_position.y + 16,
+                    global_cursor_position.x + 16 + 300,
+                    global_cursor_position.y + 16 + metrics.line_height + 8,
+                };
+                
+                for(Declaration *decl = type_declarations; decl; decl = decl->next)
+                {
+                    String_Const_u8 name = push_buffer_range(app, scratch, note_buffer,
+                                                             Ii64(decl->declaration_name->pos,
+                                                                  decl->declaration_name->pos +
+                                                                  decl->declaration_name->size));
+                    
+                    String_Const_u8 type = push_buffer_range(app, scratch, note_buffer,
+                                                             Ii64(decl->type_name->pos,
+                                                                  decl->type_name->pos +
+                                                                  decl->type_name->size));
+                    
+                    Fleury4DrawTooltipRect(app, tooltip_rect);
+                    
+                    Vec2_f32 text_position =
+                    {
+                        tooltip_rect.x0 + (tooltip_rect.y1 - tooltip_rect.y0)/2 - metrics.line_height/2,
+                        (tooltip_rect.y1 + tooltip_rect.y0)/2 - metrics.line_height/2,
+                    };
+                    
+                    ARGB_Color main_color = fcolor_resolve(fcolor_id(defcolor_comment));
+                    ARGB_Color hint_color = main_color;
+                    hint_color &= 0x00ffffff;
+                    hint_color |= 0xab000000;
+                    
+                    text_position = draw_string(app, face, name, text_position,
+                                                main_color);
+                    
+                    text_position.x += 20;
+                    
+                    text_position = draw_string(app, face, type, text_position,
+                                                hint_color);
+                    
+                    f32 tooltip_rect_height = tooltip_rect.y1 - tooltip_rect.y0;
+                    tooltip_rect.y0 += tooltip_rect_height;
+                    tooltip_rect.y1 += tooltip_rect_height;
+                }
+            }
+        }
+    }
+}
+
+
+//~ TODO(rjf): Smart(er) Replace Identifier
+
+static void
+Fleury4SmartReplaceIdentifier(Application_Links *app, String_Const_u8 needle, String_Const_u8 replace)
+{
+    Scratch_Block scratch(app);
+    global_history_edit_group_begin(app);
+    
+    Code_Index_Note *index_note = Fleury4LookUpStringInCodeIndex(app, needle);
+    if(index_note)
+    {
+        String_Const_u8_Array match_patterns =
+        {
+            &index_note->text,
+            1,
+        };
+        
+        String_Match_List matches = find_all_matches_all_buffers(app, scratch, match_patterns,
+                                                                 StringMatch_CaseSensitive,
+                                                                 StringMatch_LeftSideSloppy |
+                                                                 StringMatch_RightSideSloppy);
+        
+        Batch_Edit *batch_edit_head = 0;
+        Batch_Edit **batch_edit_target = &batch_edit_head;
+        
+        // NOTE(rjf): This is kind of bad because it assumes that all matches in a single buffer
+        // will be contiguous in the list. This is probably true but also might not be. Not
+        // really good to assume this, TODO(rjf): fix this.
+        Buffer_ID last_buffer_id = 0;
+        
+        for(String_Match *match = matches.first; match; match = match->next)
+        {
+            Edit edit =
+            {
+                replace,
+                match->range,
+            };
+            
+            Batch_Edit *batch_edit = push_array(scratch, Batch_Edit, 1);
+            batch_edit->next = 0;
+            batch_edit->edit = edit;
+            *batch_edit_target = batch_edit;
+            batch_edit_target = &(*batch_edit_target)->next;
+            
+            if(last_buffer_id != match->buffer || match->next == 0)
+            {
+                if(batch_edit_head)
+                {
+                    buffer_batch_edit(app, last_buffer_id, batch_edit_head);
+                    batch_edit_head = 0;
+                    batch_edit_target = &batch_edit_head;
+                }
+            }
+            
+            last_buffer_id = match->buffer;
+        }
+    }
+    else
+    {
+        // TODO(rjf): Non-indexed thing.
+    }
+    
+    global_history_edit_group_end(app);
+}
 
 //~ NOTE(rjf): Buffer Render
 
@@ -983,6 +1359,8 @@ Fleury4RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id,
     
     // NOTE(rjf): Token highlight
     {
+        ProfileScope(app, "[Fleury] Token Highlight");
+        
         Token_Iterator_Array it = token_iterator_pos(0, &token_array, cursor_pos);
         Token *token = token_it_read(&it);
         if(token && token->kind == TokenBaseKind_Identifier)
@@ -1080,6 +1458,11 @@ Fleury4RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id,
             // NOTE(rjf): Function helper
             {
                 Fleury4RenderFunctionHelper(app, view_id, buffer, text_layout_id, cursor_pos);
+            }
+            
+            // NOTE(rjf): Type helper
+            {
+                // Fleury4RenderTypeHelper(app, buffer, cursor_pos);
             }
         }
     }

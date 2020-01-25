@@ -2214,6 +2214,8 @@ Fleury4RenderCalcCode(Application_Links *app, Buffer_ID buffer,
                       Frame_Info frame_info, MemoryArena *arena, char *code_buffer,
                       i64 start_char_offset)
 {
+    ProfileScope(app, "[Fleury] Render Calc Code");
+    
     f32 current_time = global_calc_time;
     CalcSymbolTable symbol_table = CalcSymbolTableInit(arena, 1024);
     
@@ -2377,6 +2379,8 @@ static void
 Fleury4RenderCalcComments(Application_Links *app, Buffer_ID buffer, View_ID view,
                           Text_Layout_ID text_layout_id, Frame_Info frame_info)
 {
+    ProfileScope(app, "[Fleury] Calc Comments");
+    
     static char arena_buffer[64*1024*1024];
     MemoryArena arena = MemoryArenaInit(arena_buffer, sizeof(arena_buffer));
     

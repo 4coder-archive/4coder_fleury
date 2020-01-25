@@ -84,6 +84,8 @@ Fleury4SpawnPowerModeParticles(Application_Links *app, View_ID view)
 static void
 Fleury4RenderPowerMode(Application_Links *app, View_ID view, Face_ID face, Frame_Info frame_info)
 {
+    ProfileScope(app, "[Fleury] Power Mode");
+    
     Buffer_Scroll buffer_scroll = view_get_buffer_scroll(app, view);
     Face_Metrics metrics = get_face_metrics(app, face);
     
