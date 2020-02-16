@@ -213,8 +213,8 @@ Fleury4RenderCodePeek(Application_Links *app, View_ID view_id, Face_ID face_id,
         }
         
         Rect_f32 rect = {0};
-        rect.x0 = (float)((int)global_last_cursor_position.x + 16);
-        rect.y0 = (float)((int)global_last_cursor_position.y + 16);
+        rect.x0 = (float)((int)global_last_cursor_rect.x0 + 16);
+        rect.y0 = (float)((int)global_last_cursor_rect.y0 + 16);
         rect.x1 = (float)((int)rect.x0 + 800);
         rect.y1 = (float)((int)rect.y0 + 600*global_code_peek_open_transition);
         

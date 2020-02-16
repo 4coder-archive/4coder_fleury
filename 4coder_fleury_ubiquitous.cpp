@@ -272,36 +272,39 @@ CStringCRC32(char *string)
 static Face_ID global_styled_title_face = 0;
 static Face_ID global_styled_label_face = 0;
 static Face_ID global_small_code_face = 0;
-static Vec2_f32 global_cursor_position = {0};
-static Vec2_f32 global_last_cursor_position = {0};
+static Rect_f32 global_cursor_rect = {0};
+static Rect_f32 global_last_cursor_rect = {0};
+static Rect_f32 global_mark_rect = {0};
+static Rect_f32 global_last_mark_rect = {0};
 static b32 global_dark_mode = 1;
+static b32 global_battery_saver = 0;
 
 static Code_Index_Note *
 Fleury4LookUpStringInCodeIndex(Application_Links *app, String_Const_u8 string)
 {
     Code_Index_Note *note = 0;
     
-	if (string.str)
-	{
-		for (Buffer_ID buffer_it = get_buffer_next(app, 0, Access_Always);
+    if (string.str)
+    {
+        for (Buffer_ID buffer_it = get_buffer_next(app, 0, Access_Always);
              buffer_it != 0; buffer_it = get_buffer_next(app, buffer_it, Access_Always))
-		{
-			Code_Index_File* file = code_index_get_file(buffer_it);
-			if (file != 0)
-			{
-				for (i32 i = 0; i < file->note_array.count; i += 1)
-				{
-					Code_Index_Note* this_note = file->note_array.ptrs[i];
+        {
+            Code_Index_File* file = code_index_get_file(buffer_it);
+            if (file != 0)
+            {
+                for (i32 i = 0; i < file->note_array.count; i += 1)
+                {
+                    Code_Index_Note* this_note = file->note_array.ptrs[i];
                     
-					if (string_match(this_note->text, string))
-					{
-						note = this_note;
-						break;
-					}
-				}
-			}
-		}
-	}
+                    if (string_match(this_note->text, string))
+                    {
+                        note = this_note;
+                        break;
+                    }
+                }
+            }
+        }
+    }
     return note;
 }
 

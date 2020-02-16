@@ -331,6 +331,12 @@ CUSTOM_DOC("Does a smart-replace of the identifier under the cursor")
     }
 }
 
+CUSTOM_COMMAND_SIG(fleury_toggle_battery_saver)
+CUSTOM_DOC("Toggles battery saving mode.")
+{
+    global_battery_saver = !global_battery_saver;
+}
+
 //~ NOTE(rjf): Custom layer initialization
 
 void
@@ -854,10 +860,10 @@ Fleury4RenderFunctionHelper(Application_Links *app, View_ID view, Buffer_ID buff
                                 
                                 Rect_f32 helper_rect =
                                 {
-                                    global_cursor_position.x + 16,
-                                    global_cursor_position.y + 16,
-                                    global_cursor_position.x + 16,
-                                    global_cursor_position.y + metrics.line_height + 26,
+                                    global_cursor_rect.x0 + 16,
+                                    global_cursor_rect.y0 + 16,
+                                    global_cursor_rect.x0 + 16,
+                                    global_cursor_rect.y0 + metrics.line_height + 26,
                                 };
                                 
                                 f32 padding = (helper_rect.y1 - helper_rect.y0)/2 -
@@ -1044,7 +1050,7 @@ Fleury4ParseDeclarationList(Application_Links *app, Arena *arena, Buffer_ID buff
             }
         }
         else if((type_name->kind == TokenBaseKind_Identifier || 
-			     type_name->kind == TokenBaseKind_Keyword) &&
+                 type_name->kind == TokenBaseKind_Keyword) &&
                 scope_nest == 1)
         {
             Token *declaration_name = 0;
@@ -1082,7 +1088,7 @@ Fleury4ParseDeclarationList(Application_Links *app, Arena *arena, Buffer_ID buff
                 decl->type_name = type_name;
                 decl->pointer_count = pointer_count;
                 decl->declaration_name = declaration_name;
-				decl->next = 0;
+                decl->next = 0;
                 
                 *target = decl;
                 target = &(*target)->next;
@@ -1138,10 +1144,10 @@ Fleury4RenderTypeHelper(Application_Links *app, Buffer_ID buffer, i64 pos)
                 
                 Rect_f32 tooltip_rect =
                 {
-                    global_cursor_position.x + 16,
-                    global_cursor_position.y + 16,
-                    global_cursor_position.x + 16 + 300,
-                    global_cursor_position.y + 16 + metrics.line_height + 8,
+                    global_cursor_rect.x0 + 16,
+                    global_cursor_rect.y0 + 16,
+                    global_cursor_rect.x0 + 16 + 300,
+                    global_cursor_rect.y0 + 16 + metrics.line_height + 8,
                 };
                 
                 for(Declaration *decl = type_declarations; decl; decl = decl->next)
@@ -1382,6 +1388,12 @@ Fleury4RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id,
         Fleury4RenderDividerComments(app, buffer, view_id, text_layout_id);
     }
     
+    // NOTE(rjf): Cursor Mark Range
+    if(is_active_view)
+    {
+        Fleury4HighlightCursorMarkRange(app, view_id);
+    }
+    
     // NOTE(allen): Cursor shape
     Face_Metrics metrics = get_face_metrics(app, face_id);
     f32 cursor_roundness = (metrics.normal_advance*0.5f)*0.9f;
@@ -1408,6 +1420,11 @@ Fleury4RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id,
         Fleury4RenderCloseBraceAnnotation(app, buffer, text_layout_id, cursor_pos);
     }
     
+    // NOTE(rjf): Mark Annotation
+    {
+        Fleury4RenderMarkAnnotation(app, buffer, text_layout_id, view_id, is_active_view);
+    }
+    
     // NOTE(rjf): Brace lines
     {
         Fleury4RenderBraceLines(app, buffer, view_id, text_layout_id, cursor_pos);
@@ -1417,6 +1434,7 @@ Fleury4RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id,
     draw_text_layout_default(app, text_layout_id);
     
     // NOTE(rjf): Update calc (once per frame).
+    // TODO(rjf): Move this into a tick hook? WTF are you doing?
     {
         static i32 last_frame_index = -1;
         if(last_frame_index != frame_info.index)

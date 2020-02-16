@@ -63,6 +63,7 @@ Fleury4SetBindings(Mapping *mapping)
         Bind(fleury_place_cursor, KeyCode_Tick, KeyCode_Alt);
         Bind(fleury_toggle_power_mode, KeyCode_P, KeyCode_Alt);
         Bind(jump_to_definition, KeyCode_J, KeyCode_Control);
+        Bind(fleury_toggle_battery_saver, KeyCode_Tick, KeyCode_Alt);
     }
     
     SelectMap(mapid_file);
