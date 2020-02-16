@@ -199,7 +199,7 @@ Fleury4RenderCursor(Application_Links *app, View_ID view_id, b32 is_active_view,
         }
     }
 }
-s
+
 static void
 Fleury4HighlightCursorMarkRange(Application_Links *app, View_ID view_id)
 {
