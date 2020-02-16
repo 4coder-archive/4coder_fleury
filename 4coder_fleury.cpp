@@ -19,13 +19,20 @@
 
 //~ TODO(rjf)
 //
+// [ ] Project-wide todo list (by searching for TODO and DONE comments, lister for toggling)
+// [ ] Project switcher
+// [ ] Remember to enable type/macro/function highlighting when Allen adds a table lookup for
+//   the code index
+// [ ] Plan + do modal input scheme... Identifier-mode, text-mode, semantics mode, search mode...?
 // [X] Fix plot layout bugs when the plot call isn't in visible range
+// [ ] Fix plot clip rect bugs when the plot is not 100% in the visible range
+//   (caused by 4coder laying out characters off the screen as being at 0, 0)
 // [X] Nested parentheses bug in function helper
 // [ ] Labels for histogram bins
 // [X] Make plot grid lines + tick labels not terrible
 // [X] Let function helper work without closing paren
 // [X] Fix comment calc comment output, by interpreting entire scripts, and layouting
-//     results correctly.
+//   results correctly.
 // [X] Investigate weird layout positioning issue in *calc* buffer.
 // [X] Finish *calc* buffer.
 
@@ -210,7 +217,7 @@ t = 2 * abs((time()/8) % 1 - 0.5)
 plot_xaxis('t', -0.25, 1.25)
 plot_yaxis('v', -0.25, 1.25)
 
-plot_title('Linear')
+  plot_title('Linear')
 transition = [ [t] [t] ]
 plot(x, transition, t)
 
