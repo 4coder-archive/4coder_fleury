@@ -110,6 +110,9 @@ Fleury4RenderCursor(Application_Links *app, View_ID view_id, b32 is_active_view,
                     Buffer_ID buffer, Text_Layout_ID text_layout_id,
                     f32 roundness, f32 outline_thickness, Frame_Info frame_info)
 {
+    Rect_f32 view_rect = view_get_screen_rect(app, view_id);
+    Range_i64 visible_range = text_layout_get_visible_range(app, text_layout_id);
+    
     b32 has_highlight_range = draw_highlight_range(app, view_id, buffer, text_layout_id, roundness);
     
     FColor cursor_color = fcolor_id(defcolor_cursor);
@@ -150,6 +153,14 @@ Fleury4RenderCursor(Application_Links *app, View_ID view_id, b32 is_active_view,
                                              &global_last_cursor_rect, target_cursor);
                     
                     Rect_f32 target_mark = text_layout_character_on_screen(app, text_layout_id, mark_pos);
+                    
+                    if(mark_pos > visible_range.end)
+                    {
+                        target_mark.x0 = 0;
+                        target_mark.y0 = view_rect.y1;
+                        target_mark.y1 = view_rect.y1;
+                    }
+                    
                     DoTheCursorInterpolation(app, frame_info, &global_mark_rect, &global_last_mark_rect,
                                              target_mark);
                 }
@@ -188,7 +199,7 @@ Fleury4RenderCursor(Application_Links *app, View_ID view_id, b32 is_active_view,
         }
     }
 }
-
+s
 static void
 Fleury4HighlightCursorMarkRange(Application_Links *app, View_ID view_id)
 {
