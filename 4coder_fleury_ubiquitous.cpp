@@ -8,6 +8,25 @@ struct MemoryArena
     u32 bytes_left;
 };
 
+static Face_ID global_styled_title_face = 0;
+static Face_ID global_styled_label_face = 0;
+static Face_ID global_small_code_face = 0;
+static Rect_f32 global_cursor_rect = {0};
+static Rect_f32 global_last_cursor_rect = {0};
+static Rect_f32 global_mark_rect = {0};
+static Rect_f32 global_last_mark_rect = {0};
+static b32 global_dark_mode = 1;
+static b32 global_battery_saver = 0;
+
+static struct
+{
+    String_Const_u8 string;
+    ARGB_Color color;
+}
+global_tooltips[32] = {0};
+static int global_tooltip_count = 0;
+static MemoryArena global_frame_arena = {0};
+
 static MemoryArena
 MemoryArenaInit(void *buffer, u32 buffer_size)
 {
@@ -269,16 +288,6 @@ CStringCRC32(char *string)
     return hash;
 }
 
-static Face_ID global_styled_title_face = 0;
-static Face_ID global_styled_label_face = 0;
-static Face_ID global_small_code_face = 0;
-static Rect_f32 global_cursor_rect = {0};
-static Rect_f32 global_last_cursor_rect = {0};
-static Rect_f32 global_mark_rect = {0};
-static Rect_f32 global_last_mark_rect = {0};
-static b32 global_dark_mode = 1;
-static b32 global_battery_saver = 0;
-
 static Code_Index_Note *
 Fleury4LookUpStringInCodeIndex(Application_Links *app, String_Const_u8 string)
 {
@@ -495,4 +504,21 @@ Fleury4RenderRangeHighlight(Application_Links *app, View_ID view_id, Text_Layout
                                   (((u32)(background_color_g * 255.f)) <<  8) |
                                   (((u32)(background_color_b * 255.f)) <<  0));
     draw_rectangle(app, total_range_rect, 4.f, highlight_color);
+}
+
+static void
+Fleury4PushTooltip(String_Const_u8 string, ARGB_Color color)
+{
+    if(global_tooltip_count < ArrayCount(global_tooltips))
+    {
+        String_Const_u8 string_copy =
+        {
+            (u8 *)MemoryArenaAllocate(&global_frame_arena, (u32)string.size),
+        };
+        MemoryCopy(string_copy.data, string.data, string.size);
+        string_copy.size = string.size;
+        
+        global_tooltips[global_tooltip_count].color = color;
+        global_tooltips[global_tooltip_count++].string = string_copy;
+    }
 }

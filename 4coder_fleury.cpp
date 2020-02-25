@@ -23,6 +23,7 @@
 // [ ] Project switcher
 // [ ] Remember to enable type/macro/function highlighting when Allen adds a table lookup for
 //   the code index
+// [ ] Fix the cursor in the right panel when we use page up/down please?
 // [ ] Plan + do modal input scheme... Identifier-mode, text-mode, semantics mode, search mode...?
 // [X] Fix plot layout bugs when the plot call isn't in visible range
 // [ ] Fix plot clip rect bugs when the plot is not 100% in the visible range
@@ -255,6 +256,7 @@ plot(1-1 * 0.5^(10*x), transition, 1-1 * 0.5^(10*t))
 
 
 //~ NOTE(rjf): Hooks
+static void Fleury4Tick(Application_Links *app, Frame_Info frame_info);
 static i32  Fleury4BeginBuffer(Application_Links *app, Buffer_ID buffer_id);
 static void Fleury4Render(Application_Links *app, Frame_Info frame_info, View_ID view_id);
 static Layout_Item_List Fleury4Layout(Application_Links *app, Arena *arena, Buffer_ID buffer, Range_i64 range, Face_ID face, f32 width);
@@ -366,6 +368,7 @@ custom_layer_init(Application_Links *app)
     // NOTE(allen): default hooks and command maps
     {
         set_all_default_hooks(app);
+        set_custom_hook(app, HookID_Tick,          Fleury4Tick);
         set_custom_hook(app, HookID_RenderCaller,  Fleury4Render);
         set_custom_hook(app, HookID_BeginBuffer,   Fleury4BeginBuffer);
         set_custom_hook(app, HookID_Layout,        Fleury4Layout);
@@ -585,14 +588,32 @@ Fleury4RenderErrorAnnotations(Application_Links *app, Buffer_ID buffer,
                     Range_f32 y1 = text_layout_line_on_screen(app, text_layout_id, line_range.min);
                     Range_f32 y2 = text_layout_line_on_screen(app, text_layout_id, line_range.max);
                     Range_f32 y = range_union(y1, y2);
+                    Rect_f32 last_character_on_line_rect =
+                        text_layout_character_on_screen(app, text_layout_id, get_line_end_pos(app, buffer, code_line_number)-1);
+                    
                     if(range_size(y) > 0.f)
                     {
                         Rect_f32 region = text_layout_region(app, text_layout_id);
-                        draw_string(app, face, jump_line,
-                                    V2f32(region.x1 - metrics.max_advance*jump_line.size -
-                                          (y.max-y.min)/2 - metrics.line_height/2,
-                                          y.min + (y.max-y.min)/2 - metrics.line_height/2),
-                                    0xffff0000);
+                        Vec2_f32 draw_position =
+                        {
+                            region.x1 - metrics.max_advance*jump_line.size -
+                                (y.max-y.min)/2 - metrics.line_height/2,
+                            y.min + (y.max-y.min)/2 - metrics.line_height/2,
+                        };
+                        
+                        if(draw_position.x < last_character_on_line_rect.x1 + 30)
+                        {
+                            draw_position.x = last_character_on_line_rect.x1 + 30;
+                        }
+                        
+                        draw_string(app, face, jump_line, draw_position, 0xffff0000);
+                        
+                        Mouse_State mouse_state = get_mouse_state(app);
+                        if(mouse_state.x >= region.x0 && mouse_state.x <= region.x1 &&
+                           mouse_state.y >= y.min && mouse_state.y <= y.max)
+                        {
+                            Fleury4PushTooltip(jump_line, 0xffff0000);
+                        }
                     }
                 }
             }
@@ -1490,6 +1511,45 @@ Fleury4RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id,
                 // Fleury4RenderTypeHelper(app, buffer, cursor_pos);
             }
         }
+        
+        // NOTE(rjf): Draw tooltip list.
+        {
+            Mouse_State mouse = get_mouse_state(app);
+            
+            Rect_f32 view_rect = view_get_screen_rect(app, view_id);
+            
+            Face_ID tooltip_face_id = global_small_code_face;
+            Face_Metrics tooltip_face_metrics = get_face_metrics(app, tooltip_face_id);
+            
+            Rect_f32 tooltip_rect =
+            {
+                (f32)mouse.x + 16,
+                (f32)mouse.y + 16,
+                (f32)mouse.x + 16,
+                (f32)mouse.y + 16 + tooltip_face_metrics.line_height + 8,
+            };
+            
+            for(int i = 0; i < global_tooltip_count; ++i)
+            {
+                String_Const_u8 string = global_tooltips[i].string;
+                tooltip_rect.x1 = tooltip_rect.x0;
+                tooltip_rect.x1 += get_string_advance(app, tooltip_face_id, string) + 4;
+                
+                if(tooltip_rect.x1 > view_rect.x1)
+                {
+                    f32 difference = tooltip_rect.x1 - view_rect.x1;
+                    tooltip_rect.x1 = (float)(int)(tooltip_rect.x1 - difference);
+                    tooltip_rect.x0 = (float)(int)(tooltip_rect.x0 - difference);
+                }
+                
+                Fleury4DrawTooltipRect(app, tooltip_rect);
+                
+                draw_string(app, tooltip_face_id, string,
+                            V2f32(tooltip_rect.x0 + 4,
+                                  tooltip_rect.y0 + 4),
+                            global_tooltips[i].color);
+            }
+        }
     }
     
     // NOTE(rjf): Draw power mode.
@@ -1773,4 +1833,16 @@ static Layout_Item_List
 Fleury4Layout(Application_Links *app, Arena *arena, Buffer_ID buffer, Range_i64 range, Face_ID face, f32 width)
 {
     return(Fleury4LayoutInner(app, arena, buffer, range, face, width, LayoutVirtualIndent_Off));
+}
+
+//~ NOTE(rjf): Tick
+
+static void
+Fleury4Tick(Application_Links *app, Frame_Info frame_info)
+{
+    // NOTE(rjf): Default tick stuff from the 4th dimension:
+    default_tick(app, frame_info);
+    static char frame_arena_memory[1024*1024*1024];
+    global_frame_arena = MemoryArenaInit(frame_arena_memory, sizeof(frame_arena_memory));
+    global_tooltip_count = 0;
 }

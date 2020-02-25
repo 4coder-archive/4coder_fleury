@@ -111,6 +111,7 @@ Fleury4RenderCursor(Application_Links *app, View_ID view_id, b32 is_active_view,
                     f32 roundness, f32 outline_thickness, Frame_Info frame_info)
 {
     Rect_f32 view_rect = view_get_screen_rect(app, view_id);
+    Rect_f32 clip = draw_set_clip(app, view_rect);
     Range_i64 visible_range = text_layout_get_visible_range(app, text_layout_id);
     
     b32 has_highlight_range = draw_highlight_range(app, view_id, buffer, text_layout_id, roundness);
@@ -198,6 +199,8 @@ Fleury4RenderCursor(Application_Links *app, View_ID view_id, b32 is_active_view,
                                             fcolor_resolve(fcolor_change_alpha(cursor_color, 0.5f)), !cursor_open);
         }
     }
+    
+    draw_set_clip(app, clip);
 }
 
 static void
