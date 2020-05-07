@@ -150,6 +150,14 @@ Fleury4RenderCursor(Application_Links *app, View_ID view_id, b32 is_active_view,
                 if(is_active_view)
                 {
                     Rect_f32 target_cursor = text_layout_character_on_screen(app, text_layout_id, cursor_pos);
+                    
+                    if(cursor_pos < visible_range.start || cursor_pos > visible_range.end)
+                    {
+                        f32 width = target_cursor.x1 - target_cursor.x0;
+                        target_cursor.x0 = view_rect.x0;
+                        target_cursor.x1 = target_cursor.x0 + width;
+                    }
+                    
                     DoTheCursorInterpolation(app, frame_info, &global_cursor_rect,
                                              &global_last_cursor_rect, target_cursor);
                     
@@ -160,6 +168,13 @@ Fleury4RenderCursor(Application_Links *app, View_ID view_id, b32 is_active_view,
                         target_mark.x0 = 0;
                         target_mark.y0 = view_rect.y1;
                         target_mark.y1 = view_rect.y1;
+                    }
+                    
+                    if(mark_pos < visible_range.start || mark_pos > visible_range.end)
+                    {
+                        f32 width = target_mark.x1 - target_mark.x0;
+                        target_mark.x0 = view_rect.x0;
+                        target_mark.x1 = target_mark.x0 + width;
                     }
                     
                     DoTheCursorInterpolation(app, frame_info, &global_mark_rect, &global_last_mark_rect,
