@@ -282,7 +282,7 @@ enum CalcNodeType
 {
 #define CalcNodeType(name, precedence) CALC_NODE_TYPE_##name,
     CALC_NODE_TYPE_LIST
-    #undef CalcNodeType
+#undef CalcNodeType
 };
 
 static int
@@ -292,7 +292,7 @@ CalcOperatorPrecedence(CalcNodeType type)
     {
 #define CalcNodeType(name, precedence) precedence,
         CALC_NODE_TYPE_LIST
-    #undef CalcNodeType
+#undef CalcNodeType
     };
     return precedence_table[type];
 }
@@ -301,7 +301,7 @@ enum CalcType
 {
 #define CalcType(name, str) CALC_TYPE_##name,
     CALC_TYPE_LIST
-    #undef CalcType
+#undef CalcType
 };
 
 static char *
@@ -311,7 +311,7 @@ CalcTypeName(CalcType type)
     {
 #define CalcType(name, str) str,
         CALC_TYPE_LIST
-    #undef CalcType
+#undef CalcType
     };
     return name_table[type];
 }

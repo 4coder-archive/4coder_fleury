@@ -98,10 +98,6 @@ Fleury4RenderCloseBraceAnnotation(Application_Links *app, Buffer_ID buffer, Text
             for(;;)
             {
                 Token *token = token_it_read(&it);
-                if(!token_it_dec_non_whitespace(&it))
-                {
-                    break;
-                }
                 
                 if(token)
                 {
@@ -117,7 +113,7 @@ Fleury4RenderCloseBraceAnnotation(Application_Links *app, Buffer_ID buffer, Text
                     }
                     else if(paren_nest == 0 &&
                             (token->kind == TokenBaseKind_ScopeClose ||
-                             token->kind == TokenBaseKind_StatementClose))
+                             (token->kind == TokenBaseKind_StatementClose && token->sub_kind != TokenCppKind_Colon)))
                     {
                         break;
                     }
@@ -131,6 +127,11 @@ Fleury4RenderCloseBraceAnnotation(Application_Links *app, Buffer_ID buffer, Text
                     
                 }
                 else
+                {
+                    break;
+                }
+                
+                if(!token_it_dec_non_whitespace(&it))
                 {
                     break;
                 }
