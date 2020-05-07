@@ -352,7 +352,7 @@ void
 custom_layer_init(Application_Links *app)
 {
     Thread_Context *tctx = get_thread_context(app);
- 
+    
     default_framework_init(app);
     set_all_default_hooks(app);
     set_custom_hook(app, HookID_Tick,          Fleury4Tick);
@@ -361,7 +361,7 @@ custom_layer_init(Application_Links *app)
     set_custom_hook(app, HookID_Layout,        Fleury4Layout);
     mapping_init(tctx, &framework_mapping);
     Fleury4SetBindings(&framework_mapping);
-
+    
     // NOTE(rjf): Open calc buffer.
     {
         Buffer_ID calc_buffer = create_buffer(app, string_u8_litexpr("*calc*"),
@@ -964,7 +964,7 @@ struct Declaration
 };
 
 static Declaration
-Fleury4FindDeclarationWithString(Application_Links *app, Buffer_ID buffer, 
+Fleury4FindDeclarationWithString(Application_Links *app, Buffer_ID buffer,
                                  Token_Iterator_Array it, Token *needle)
 {
     Declaration declaration = {0};
@@ -1063,7 +1063,7 @@ Fleury4ParseDeclarationList(Application_Links *app, Arena *arena, Buffer_ID buff
                 break;
             }
         }
-        else if((type_name->kind == TokenBaseKind_Identifier || 
+        else if((type_name->kind == TokenBaseKind_Identifier ||
                  type_name->kind == TokenBaseKind_Keyword) &&
                 scope_nest == 1)
         {
@@ -1340,11 +1340,15 @@ Fleury4RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id,
     }
     
     // NOTE(allen): Line highlight
-    if(global_config.highlight_line_at_cursor && is_active_view)
     {
-        i64 line_number = get_line_number_from_pos(app, buffer, cursor_pos);
-        draw_line_highlight(app, text_layout_id, line_number,
-                            fcolor_id(defcolor_highlight_cursor_line));
+        String_Const_u8 name = string_u8_litexpr("*compilation*");
+        Buffer_ID compilation_buffer = get_buffer_by_name(app, name, Access_Always);
+        if(global_config.highlight_line_at_cursor && (is_active_view || buffer == compilation_buffer))
+        {
+            i64 line_number = get_line_number_from_pos(app, buffer, cursor_pos);
+            draw_line_highlight(app, text_layout_id, line_number,
+                                fcolor_id(defcolor_highlight_cursor_line));
+        }
     }
     
     if(global_config.use_error_highlight || global_config.use_jump_highlight)
