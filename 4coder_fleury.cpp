@@ -23,7 +23,7 @@
 // [ ] Project switcher
 // [ ] Remember to enable type/macro/function highlighting when Allen adds a table lookup for
 //   the code index
-// [ ] Fix the cursor in the right panel when we use page up/down please?
+// [X] Fix the cursor in the right panel when we use page up/down please?
 // [ ] Plan + do modal input scheme... Identifier-mode, text-mode, semantics mode, search mode...?
 // [X] Fix plot layout bugs when the plot call isn't in visible range
 // [ ] Fix plot clip rect bugs when the plot is not 100% in the visible range

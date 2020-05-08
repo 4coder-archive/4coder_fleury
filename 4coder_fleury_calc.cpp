@@ -265,7 +265,8 @@ CalcNodeType(divide,                 2)\
 CalcNodeType(modulus,                2)\
 CalcNodeType(raise_to_power,         0)\
 CalcNodeType(negate,                 0)\
-CalcNodeType(assignment,             0)
+CalcNodeType(assignment,             0)\
+CalcNodeType(array_index,            0)\
 
 #define CALC_TYPE_LIST                                      \
 CalcType(error,                 "error")                \
@@ -498,6 +499,28 @@ ParseCalcUnaryExpression(MemoryArena *arena, char **at_ptr)
         expression = AllocateCalcNode(arena, CALC_NODE_TYPE_raise_to_power, at_source);
         expression->left = old_expr;
         expression->right = ParseCalcUnaryExpression(arena, at_ptr);
+    }
+    
+    // NOTE(rjf): Array index.
+    while(RequireCalcToken(at_ptr, "["))
+    {
+        CalcNode *old_expr = expression;
+        expression = AllocateCalcNode(arena, CALC_NODE_TYPE_array_index, at_source);
+        expression->token = token;
+        expression->left = old_expr;
+        expression->right = ParseCalcExpression(arena, at_ptr);
+        
+        if(!expression->right)
+        {
+            expression = ErrorCalcNode(arena, "Missing array index inside of '[' and ']'.");
+            goto end_parse;
+        }
+        
+        if(!RequireCalcToken(at_ptr, "]"))
+        {
+            expression = ErrorCalcNode(arena, "Missing ']'.");
+            goto end_parse;
+        }
     }
     
     end_parse:;
@@ -1923,6 +1946,40 @@ InterpretCalcExpression(CalcInterpretContext *context, CalcNode *root)
             case CALC_NODE_TYPE_array:
             {
                 result.value = CalcValueArray(context, root->first_member);
+                break;
+            }
+            
+            case CALC_NODE_TYPE_array_index:
+            {
+                result = InterpretCalcExpression(context, root->left);
+                if(result.value.type == CALC_TYPE_array)
+                {
+                    CalcInterpretResult index = InterpretCalcExpression(context, root->right);
+                    
+                    if(index.value.type == CALC_TYPE_number)
+                    {
+                        int array_index = (int)index.value.as_f64;
+                        if(array_index >= 0 && array_index < result.value.array_count)
+                        {
+                            result.value = result.value.as_array[array_index];
+                        }
+                        else
+                        {
+                            result.value = CalcValueError("Array index out of bounds.");
+                        }
+                    }
+                    else
+                    {
+                        result.value = CalcValueError("Cannot use non-numbers to index arrays.");
+                        goto end_interpret;
+                    }
+                }
+                else
+                {
+                    result.value = CalcValueError("Cannot index a non-array.");
+                    goto end_interpret;
+                }
+                
                 break;
             }
             
