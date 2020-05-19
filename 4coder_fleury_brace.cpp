@@ -254,7 +254,7 @@ Fleury4RenderBraceLines(Application_Links *app, Buffer_ID buffer, View_ID view,
         color |= 0x60000000;
         draw_rectangle(app, line_rect, 0.5f, color);
         
-        x_position += metrics.space_advance * 4;
+        x_position += metrics.space_advance * global_config.virtual_whitespace_regular_indent;
         
     }
     
