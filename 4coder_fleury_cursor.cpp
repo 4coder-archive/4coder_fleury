@@ -324,7 +324,7 @@ Fleury4RenderMarkAnnotation(Application_Links *app, Buffer_ID buffer, Text_Layou
             u32 color = finalize_color(defcolor_comment, 0);
             color &= 0x00ffffff;
             color |= 0x80000000;
-            draw_string_oriented(app, face_id, color, start_line, draw_pos, GlyphFlag_Rotate90, V2f32(0.f, 1.f));
+            draw_string_oriented(app, face_id, color, start_line, draw_pos, 0, V2f32(0.f, 1.f));
         }
     }
 }

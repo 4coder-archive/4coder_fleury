@@ -68,7 +68,7 @@ Plot2DBegin(Plot2DInfo *plot)
     if(plot->y_axis.data)
     {
         draw_string_oriented(plot->app, plot->label_face_id, fcolor_resolve(fcolor_id(defcolor_comment)), plot->y_axis,
-                             V2f32(rect.x0 - 10, rect.y0 + 5), GlyphFlag_Rotate90, V2f32(0.f, 1.f));
+                             V2f32(rect.x0 - 10, rect.y0 + 5), 0, V2f32(0.f, 1.f));
     }
     
     plot->last_clip = draw_set_clip(plot->app, rect);
