@@ -2,8 +2,8 @@
 //~ NOTE(rjf): Brace highlight
 
 static void
-Fleury4RenderBraceHighlight(Application_Links *app, Buffer_ID buffer, Text_Layout_ID text_layout_id,
-                            i64 pos, ARGB_Color *colors, i32 color_count)
+F4_RenderBraceHighlight(Application_Links *app, Buffer_ID buffer, Text_Layout_ID text_layout_id,
+                        i64 pos, ARGB_Color *colors, i32 color_count)
 {
     ProfileScope(app, "[Fleury] Brace Highlight");
     
@@ -44,8 +44,8 @@ Fleury4RenderBraceHighlight(Application_Links *app, Buffer_ID buffer, Text_Layou
 //~ NOTE(rjf): Closing-brace Annotation
 
 static void
-Fleury4RenderCloseBraceAnnotation(Application_Links *app, Buffer_ID buffer, Text_Layout_ID text_layout_id,
-                                  i64 pos)
+F4_RenderCloseBraceAnnotation(Application_Links *app, Buffer_ID buffer, Text_Layout_ID text_layout_id,
+                              i64 pos)
 {
     ProfileScope(app, "[Fleury] Brace Annotation");
     
@@ -182,8 +182,8 @@ Fleury4RenderCloseBraceAnnotation(Application_Links *app, Buffer_ID buffer, Text
 //~ NOTE(rjf): Brace lines
 
 static void
-Fleury4RenderBraceLines(Application_Links *app, Buffer_ID buffer, View_ID view,
-                        Text_Layout_ID text_layout_id, i64 pos)
+F4_RenderBraceLines(Application_Links *app, Buffer_ID buffer, View_ID view,
+                    Text_Layout_ID text_layout_id, i64 pos)
 {
     ProfileScope(app, "[Fleury] Brace Lines");
     

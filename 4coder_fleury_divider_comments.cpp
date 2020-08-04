@@ -2,8 +2,8 @@
 //~ NOTE(rjf): Divider Comments
 
 static void
-Fleury4RenderDividerComments(Application_Links *app, Buffer_ID buffer, View_ID view,
-                             Text_Layout_ID text_layout_id)
+F4_RenderDividerComments(Application_Links *app, Buffer_ID buffer, View_ID view,
+                         Text_Layout_ID text_layout_id)
 {
     ProfileScope(app, "[Fleury] Divider Comments");
     

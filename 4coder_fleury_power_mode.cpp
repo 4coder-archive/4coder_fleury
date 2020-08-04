@@ -22,8 +22,8 @@ static struct
 global_power_mode;
 
 static void
-Fleury4Particle(f32 x, f32 y, f32 velocity_x, f32 velocity_y, ARGB_Color color,
-                f32 roundness, f32 scale)
+F4_Particle(f32 x, f32 y, f32 velocity_x, f32 velocity_y, ARGB_Color color,
+            f32 roundness, f32 scale)
 {
     if(global_power_mode.particle_count < ArrayCount(global_power_mode.particles))
     {
@@ -40,7 +40,7 @@ Fleury4Particle(f32 x, f32 y, f32 velocity_x, f32 velocity_y, ARGB_Color color,
 }
 
 static Vec2_f32
-Fleury4GetCameraFromView(Application_Links *app, View_ID view)
+F4_GetCameraFromView(Application_Links *app, View_ID view)
 {
     Buffer_ID buffer = view_get_buffer(app, view, Access_ReadWriteVisible);
     Buffer_Scroll scroll = view_get_buffer_scroll(app, view);
@@ -57,11 +57,11 @@ Fleury4GetCameraFromView(Application_Links *app, View_ID view)
 }
 
 static void
-Fleury4SpawnPowerModeParticles(Application_Links *app, View_ID view)
+F4_SpawnPowerModeParticles(Application_Links *app, View_ID view)
 {
     if(global_power_mode_enabled)
     {
-        Vec2_f32 camera = Fleury4GetCameraFromView(app, view);
+        Vec2_f32 camera = F4_GetCameraFromView(app, view);
         
         for(int i = 0; i < 60; ++i)
         {
@@ -69,12 +69,12 @@ Fleury4SpawnPowerModeParticles(Application_Links *app, View_ID view)
             f32 velocity_magnitude = RandomF32(20.f, 180.f);
             f32 velocity_x = cosf(movement_angle)*velocity_magnitude;
             f32 velocity_y = sinf(movement_angle)*velocity_magnitude;
-            Fleury4Particle(global_cursor_rect.x0 + 4 + camera.x,
-                            global_cursor_rect.y0 + 8 + camera.y,
-                            velocity_x, velocity_y,
-                            0xffffffff,
-                            RandomF32(1.5f, 8.f),
-                            RandomF32(0.5f, 6.f));
+            F4_Particle(global_cursor_rect.x0 + 4 + camera.x,
+                        global_cursor_rect.y0 + 8 + camera.y,
+                        velocity_x, velocity_y,
+                        0xffffffff,
+                        RandomF32(1.5f, 8.f),
+                        RandomF32(0.5f, 6.f));
         }
         
         global_power_mode.screen_shake += RandomF32(6.f, 16.f);
@@ -82,7 +82,7 @@ Fleury4SpawnPowerModeParticles(Application_Links *app, View_ID view)
 }
 
 static void
-Fleury4RenderPowerMode(Application_Links *app, View_ID view, Face_ID face, Frame_Info frame_info)
+F4_RenderPowerMode(Application_Links *app, View_ID view, Face_ID face, Frame_Info frame_info)
 {
     ProfileScope(app, "[Fleury] Power Mode");
     

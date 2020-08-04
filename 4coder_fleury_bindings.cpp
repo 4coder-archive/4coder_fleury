@@ -2,7 +2,7 @@
 //~ NOTE(rjf): Bindings
 
 static void
-Fleury4SetBindings(Mapping *mapping)
+F4_SetBindings(Mapping *mapping)
 {
     MappingScope();
     SelectMapping(mapping);

@@ -173,7 +173,7 @@ plot_function_samples(100)
 sin2_time = sin(time()/2)^2 + 0.2
 
 plot_title('Plotting Data')
- dat = [ [ 0 1 2 3 4 5 6 7 8 9 ] [ 0 1 2 3 4 5 6 7 8 9 ] ]
+ dat = [ [ 0 1 2 3 4 5 6 7 8 9 ], [ 0 1 2 3 4 5 6 7 8 9 ] ]
 plot_xaxis('x', 0, 10*sin2_time)
 plot_yaxis('y', 0, 10)
 plot(dat)
@@ -219,16 +219,16 @@ plot_xaxis('t', -0.25, 1.25)
 plot_yaxis('v', -0.25, 1.25)
 
   plot_title('Linear')
-transition = [ [t] [t] ]
+transition = [ [t], [t] ]
 plot(x, transition, t)
 
-plot_title('Cubic')
-transition = [ [t] [-2*t^3+3*t^2] ]
-plot(-2*x^3+3*x^2, transition, -2*t^3+3*t^2)
+ plot_title('Cubic')
+ transition = [ [t], [-2*t^3+3*t^2] ]
+ plot(-2*x^3+3*x^2, transition, -2*t^3+3*t^2)
 
-plot_title('Exponential')
-transition = [ [t] [ 1-1 * 0.5^(10*t) ] ]
-plot(1-1 * 0.5^(10*x), transition, 1-1 * 0.5^(10*t))
+ plot_title('Exponential')
+ transition = [ [t], [ 1-1 * 0.5^(10*t) ] ]
+ plot(1-1 * 0.5^(10*x), transition, 1-1 * 0.5^(10*t))
 */
 
 
@@ -255,16 +255,21 @@ plot(1-1 * 0.5^(10*x), transition, 1-1 * 0.5^(10*t))
 
 
 
+
+
+
+
 //~ NOTE(rjf): Hooks
-static void Fleury4Tick(Application_Links *app, Frame_Info frame_info);
-static i32  Fleury4BeginBuffer(Application_Links *app, Buffer_ID buffer_id);
-static void Fleury4Render(Application_Links *app, Frame_Info frame_info, View_ID view_id);
-static Layout_Item_List Fleury4Layout(Application_Links *app, Arena *arena, Buffer_ID buffer, Range_i64 range, Face_ID face, f32 width);
+static void F4_Tick(Application_Links *app, Frame_Info frame_info);
+static i32  F4_BeginBuffer(Application_Links *app, Buffer_ID buffer_id);
+static void F4_Render(Application_Links *app, Frame_Info frame_info, View_ID view_id);
+static Layout_Item_List F4_Layout(Application_Links *app, Arena *arena, Buffer_ID buffer, Range_i64 range, Face_ID face, f32 width);
+function void F4_WholeScreenRender(Application_Links *app, Frame_Info frame_info);
 
 //~ NOTE(rjf): Helpers
-static void Fleury4RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id, Buffer_ID buffer, Text_Layout_ID text_layout_id, Rect_f32 rect, Frame_Info frame_info);
-static void Fleury4RenderRangeHighlight(Application_Links *app, View_ID view_id, Text_Layout_ID text_layout_id, Range_i64 range);
-static void Fleury4SmartReplaceIdentifier(Application_Links *app, String_Const_u8 needle, String_Const_u8 replace);
+static void F4_RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id, Buffer_ID buffer, Text_Layout_ID text_layout_id, Rect_f32 rect, Frame_Info frame_info);
+static void F4_RenderRangeHighlight(Application_Links *app, View_ID view_id, Text_Layout_ID text_layout_id, Range_i64 range);
+static void F4_SmartReplaceIdentifier(Application_Links *app, String_Const_u8 needle, String_Const_u8 replace);
 
 //~ NOTE(rjf): Commands
 
@@ -272,14 +277,14 @@ CUSTOM_COMMAND_SIG(fleury_write_text_input)
 CUSTOM_DOC("Inserts whatever text was used to trigger this command.")
 {
     write_text_input(app);
-    Fleury4SpawnPowerModeParticles(app, get_active_view(app, Access_ReadWriteVisible));
+    F4_SpawnPowerModeParticles(app, get_active_view(app, Access_ReadWriteVisible));
 }
 
 CUSTOM_COMMAND_SIG(fleury_write_text_and_auto_indent)
 CUSTOM_DOC("Inserts text and auto-indents the line on which the cursor sits if any of the text contains 'layout punctuation' such as ;:{}()[]# and new lines.")
 {
     write_text_and_auto_indent(app);
-    Fleury4SpawnPowerModeParticles(app, get_active_view(app, Access_ReadWriteVisible));
+    F4_SpawnPowerModeParticles(app, get_active_view(app, Access_ReadWriteVisible));
 }
 
 CUSTOM_COMMAND_SIG(fleury_write_zero_struct)
@@ -335,7 +340,7 @@ CUSTOM_DOC("Does a smart-replace of the identifier under the cursor")
         
         if(query_user_string(app, with))
         {
-            Fleury4SmartReplaceIdentifier(app, token_string, with->string);
+            F4_SmartReplaceIdentifier(app, token_string, with->string);
         }
     }
 }
@@ -353,14 +358,17 @@ custom_layer_init(Application_Links *app)
 {
     Thread_Context *tctx = get_thread_context(app);
     
+    global_frame_arena = make_arena(get_base_allocator_system());
+    
     default_framework_init(app);
     set_all_default_hooks(app);
-    set_custom_hook(app, HookID_Tick,          Fleury4Tick);
-    set_custom_hook(app, HookID_RenderCaller,  Fleury4Render);
-    set_custom_hook(app, HookID_BeginBuffer,   Fleury4BeginBuffer);
-    set_custom_hook(app, HookID_Layout,        Fleury4Layout);
+    set_custom_hook(app, HookID_Tick,                    F4_Tick);
+    set_custom_hook(app, HookID_RenderCaller,            F4_Render);
+    set_custom_hook(app, HookID_BeginBuffer,             F4_BeginBuffer);
+    set_custom_hook(app, HookID_Layout,                  F4_Layout);
+    set_custom_hook(app, HookID_WholeScreenRenderCaller, F4_WholeScreenRender);
     mapping_init(tctx, &framework_mapping);
-    Fleury4SetBindings(&framework_mapping);
+    F4_SetBindings(&framework_mapping);
     
     // NOTE(rjf): Open calc buffer.
     {
@@ -371,7 +379,7 @@ custom_layer_init(Application_Links *app)
         // (void)calc_buffer;
     }
     
-    Fleury4DarkMode(app);
+    F4_DarkMode(app);
 }
 
 
@@ -489,9 +497,9 @@ CUSTOM_DOC("Fleury startup event")
 //~ NOTE(rjf): Error annotations
 
 static void
-Fleury4RenderErrorAnnotations(Application_Links *app, Buffer_ID buffer,
-                              Text_Layout_ID text_layout_id,
-                              Buffer_ID jump_buffer)
+F4_RenderErrorAnnotations(Application_Links *app, Buffer_ID buffer,
+                          Text_Layout_ID text_layout_id,
+                          Buffer_ID jump_buffer)
 {
     ProfileScope(app, "[Fleury] Error Annotations");
     
@@ -598,7 +606,7 @@ Fleury4RenderErrorAnnotations(Application_Links *app, Buffer_ID buffer,
                         if(mouse_state.x >= region.x0 && mouse_state.x <= region.x1 &&
                            mouse_state.y >= y.min && mouse_state.y <= y.max)
                         {
-                            Fleury4PushTooltip(jump_line, 0xffff0000);
+                            F4_PushTooltip(jump_line, 0xffff0000);
                         }
                     }
                 }
@@ -613,7 +621,7 @@ Fleury4RenderErrorAnnotations(Application_Links *app, Buffer_ID buffer,
 //~ NOTE(rjf): Function Helper
 
 static Range_i64_Array
-Fleury4GetLeftParens(Application_Links *app, Arena *arena, Buffer_ID buffer, i64 pos, u32 flags)
+F4_GetLeftParens(Application_Links *app, Arena *arena, Buffer_ID buffer, i64 pos, u32 flags)
 {
     Range_i64_Array array = {};
     i32 max = 100;
@@ -643,7 +651,7 @@ Fleury4GetLeftParens(Application_Links *app, Arena *arena, Buffer_ID buffer, i64
 }
 
 static String_Const_u8
-Fleury4CopyStringButOnlyAllowOneSpace(Arena *arena, String_Const_u8 string)
+F4_CopyStringButOnlyAllowOneSpace(Arena *arena, String_Const_u8 string)
 {
     String_Const_u8 result = {0};
     
@@ -689,8 +697,8 @@ Fleury4CopyStringButOnlyAllowOneSpace(Arena *arena, String_Const_u8 string)
 }
 
 static void
-Fleury4RenderFunctionHelper(Application_Links *app, View_ID view, Buffer_ID buffer,
-                            Text_Layout_ID text_layout_id, i64 pos)
+F4_RenderFunctionHelper(Application_Links *app, View_ID view, Buffer_ID buffer,
+                        Text_Layout_ID text_layout_id, i64 pos)
 {
     ProfileScope(app, "[Fleury] Function Helper");
     
@@ -727,7 +735,7 @@ Fleury4RenderFunctionHelper(Application_Links *app, View_ID view, Buffer_ID buff
     }
     
     Scratch_Block scratch(app);
-    Range_i64_Array ranges = Fleury4GetLeftParens(app, scratch, buffer, pos, FindNest_Paren);
+    Range_i64_Array ranges = F4_GetLeftParens(app, scratch, buffer, pos, FindNest_Paren);
     
     for(int range_index = 0; range_index < ranges.count; ++range_index)
     {
@@ -739,7 +747,7 @@ Fleury4RenderFunctionHelper(Application_Links *app, View_ID view, Buffer_ID buff
             Range_i64 function_name_range = Ii64(token->pos, token->pos+token->size);
             String_Const_u8 function_name = push_buffer_range(app, scratch, buffer, function_name_range);
             
-            Fleury4RenderRangeHighlight(app, view, text_layout_id, function_name_range);
+            F4_RenderRangeHighlight(app, view, text_layout_id, function_name_range);
             
             // NOTE(rjf): Find active parameter.
             int active_parameter_index = 0;
@@ -868,9 +876,9 @@ Fleury4RenderFunctionHelper(Application_Links *app, View_ID view, Buffer_ID buff
                                     (u64)(function_def_range.max - highlight_parameter_range.max),
                                 };
                                 
-                                String_Const_u8 highlight_param = Fleury4CopyStringButOnlyAllowOneSpace(scratch, highlight_param_untrimmed);
-                                String_Const_u8 pre_highlight_def = Fleury4CopyStringButOnlyAllowOneSpace(scratch, pre_highlight_def_untrimmed);
-                                String_Const_u8 post_highlight_def = Fleury4CopyStringButOnlyAllowOneSpace(scratch, post_highlight_def_untrimmed);
+                                String_Const_u8 highlight_param = F4_CopyStringButOnlyAllowOneSpace(scratch, highlight_param_untrimmed);
+                                String_Const_u8 pre_highlight_def = F4_CopyStringButOnlyAllowOneSpace(scratch, pre_highlight_def_untrimmed);
+                                String_Const_u8 post_highlight_def = F4_CopyStringButOnlyAllowOneSpace(scratch, post_highlight_def_untrimmed);
                                 
                                 Rect_f32 helper_rect =
                                 {
@@ -904,7 +912,7 @@ Fleury4RenderFunctionHelper(Application_Links *app, View_ID view, Buffer_ID buff
                                     helper_rect.y0 + padding,
                                 };
                                 
-                                Fleury4DrawTooltipRect(app, helper_rect);
+                                F4_DrawTooltipRect(app, helper_rect);
                                 
                                 text_position = draw_string(app, face, pre_highlight_def,
                                                             text_position, finalize_color(defcolor_comment, 0));
@@ -912,7 +920,7 @@ Fleury4RenderFunctionHelper(Application_Links *app, View_ID view, Buffer_ID buff
                                 // NOTE(rjf): Spawn power mode particles if we've changed active parameters.
                                 if(active_parameter_has_increased_by_one && global_power_mode_enabled)
                                 {
-                                    Vec2_f32 camera = Fleury4GetCameraFromView(app, view);
+                                    Vec2_f32 camera = F4_GetCameraFromView(app, view);
                                     
                                     f32 text_width = get_string_advance(app, face, highlight_param);
                                     
@@ -922,12 +930,12 @@ Fleury4RenderFunctionHelper(Application_Links *app, View_ID view, Buffer_ID buff
                                         f32 velocity_magnitude = RandomF32(20.f, 180.f);
                                         f32 velocity_x = cosf(movement_angle)*velocity_magnitude;
                                         f32 velocity_y = sinf(movement_angle)*velocity_magnitude;
-                                        Fleury4Particle(text_position.x + 4 + camera.x + (particle_i/500.f)*text_width,
-                                                        text_position.y + 8 + camera.y,
-                                                        velocity_x, velocity_y,
-                                                        0xffffffff,
-                                                        RandomF32(1.5f, 8.f),
-                                                        RandomF32(0.5f, 6.f));
+                                        F4_Particle(text_position.x + 4 + camera.x + (particle_i/500.f)*text_width,
+                                                    text_position.y + 8 + camera.y,
+                                                    velocity_x, velocity_y,
+                                                    0xffffffff,
+                                                    RandomF32(1.5f, 8.f),
+                                                    RandomF32(0.5f, 6.f));
                                     }
                                     
                                     global_power_mode.screen_shake += RandomF32(20.f, 40.f);
@@ -964,8 +972,8 @@ struct Declaration
 };
 
 static Declaration
-Fleury4FindDeclarationWithString(Application_Links *app, Buffer_ID buffer,
-                                 Token_Iterator_Array it, Token *needle)
+F4_FindDeclarationWithString(Application_Links *app, Buffer_ID buffer,
+                             Token_Iterator_Array it, Token *needle)
 {
     Declaration declaration = {0};
     
@@ -1032,7 +1040,7 @@ Fleury4FindDeclarationWithString(Application_Links *app, Buffer_ID buffer,
 }
 
 static Declaration *
-Fleury4ParseDeclarationList(Application_Links *app, Arena *arena, Buffer_ID buffer, i64 pos)
+F4_ParseDeclarationList(Application_Links *app, Arena *arena, Buffer_ID buffer, i64 pos)
 {
     Declaration *head = 0;
     Declaration **target = &head;
@@ -1114,7 +1122,7 @@ Fleury4ParseDeclarationList(Application_Links *app, Arena *arena, Buffer_ID buff
 }
 
 static void
-Fleury4RenderTypeHelper(Application_Links *app, Buffer_ID buffer, i64 pos)
+F4_RenderTypeHelper(Application_Links *app, Buffer_ID buffer, i64 pos)
 {
     Scratch_Block scratch(app);
     
@@ -1140,18 +1148,18 @@ Fleury4RenderTypeHelper(Application_Links *app, Buffer_ID buffer, i64 pos)
     if(token && token->kind == TokenBaseKind_Identifier)
     {
         token_it_dec_non_whitespace(&it);
-        Declaration declaration = Fleury4FindDeclarationWithString(app, buffer, it, token);
+        Declaration declaration = F4_FindDeclarationWithString(app, buffer, it, token);
         
         if(declaration.type_name)
         {
             Code_Index_Note *type_note =
-                Fleury4LookUpTokenInCodeIndex(app, buffer, *declaration.type_name);
+                F4_LookUpTokenInCodeIndex(app, buffer, *declaration.type_name);
             
             if(type_note && type_note->note_kind == CodeIndexNote_Type)
             {
                 Buffer_ID note_buffer = type_note->file->buffer;
                 Declaration *type_declarations =
-                    Fleury4ParseDeclarationList(app, scratch, note_buffer, type_note->pos.start);
+                    F4_ParseDeclarationList(app, scratch, note_buffer, type_note->pos.start);
                 
                 Face_ID face = global_small_code_face;
                 Face_Metrics metrics = get_face_metrics(app, face);
@@ -1176,7 +1184,7 @@ Fleury4RenderTypeHelper(Application_Links *app, Buffer_ID buffer, i64 pos)
                                                                   decl->type_name->pos +
                                                                   decl->type_name->size));
                     
-                    Fleury4DrawTooltipRect(app, tooltip_rect);
+                    F4_DrawTooltipRect(app, tooltip_rect);
                     
                     Vec2_f32 text_position =
                     {
@@ -1210,12 +1218,12 @@ Fleury4RenderTypeHelper(Application_Links *app, Buffer_ID buffer, i64 pos)
 //~ TODO(rjf): Smart(er) Replace Identifier
 
 static void
-Fleury4SmartReplaceIdentifier(Application_Links *app, String_Const_u8 needle, String_Const_u8 replace)
+F4_SmartReplaceIdentifier(Application_Links *app, String_Const_u8 needle, String_Const_u8 replace)
 {
     Scratch_Block scratch(app);
     global_history_edit_group_begin(app);
     
-    Code_Index_Note *index_note = Fleury4LookUpStringInCodeIndex(app, needle);
+    Code_Index_Note *index_note = F4_LookUpStringInCodeIndex(app, needle);
     if(index_note)
     {
         String_Const_u8_Array match_patterns =
@@ -1275,9 +1283,9 @@ Fleury4SmartReplaceIdentifier(Application_Links *app, String_Const_u8 needle, St
 //~ NOTE(rjf): Buffer Render
 
 static void
-Fleury4RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id,
-                    Buffer_ID buffer, Text_Layout_ID text_layout_id,
-                    Rect_f32 rect, Frame_Info frame_info)
+F4_RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id,
+                Buffer_ID buffer, Text_Layout_ID text_layout_id,
+                Rect_f32 rect, Frame_Info frame_info)
 {
     ProfileScope(app, "[Fleury] Render Buffer");
     
@@ -1289,7 +1297,7 @@ Fleury4RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id,
     Token_Array token_array = get_token_array_from_buffer(app, buffer);
     if(token_array.tokens != 0)
     {
-        Fleury4DrawCTokenColors(app, text_layout_id, &token_array);
+        F4_DrawCTokenColors(app, text_layout_id, &token_array);
         
         // NOTE(allen): Scan for TODOs and NOTEs
         if(global_config.use_comment_keyword)
@@ -1335,8 +1343,8 @@ Fleury4RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id,
             0xff8ffff2,
         };
         
-        Fleury4RenderBraceHighlight(app, buffer, text_layout_id, cursor_pos,
-                                    colors, sizeof(colors)/sizeof(colors[0]));
+        F4_RenderBraceHighlight(app, buffer, text_layout_id, cursor_pos,
+                                colors, sizeof(colors)/sizeof(colors[0]));
     }
     
     // NOTE(allen): Line highlight
@@ -1378,7 +1386,7 @@ Fleury4RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id,
     {
         String_Const_u8 name = string_u8_litexpr("*compilation*");
         Buffer_ID compilation_buffer = get_buffer_by_name(app, name, Access_Always);
-        Fleury4RenderErrorAnnotations(app, buffer, text_layout_id, compilation_buffer);
+        F4_RenderErrorAnnotations(app, buffer, text_layout_id, compilation_buffer);
     }
     
     // NOTE(rjf): Token highlight
@@ -1389,8 +1397,8 @@ Fleury4RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id,
         Token *token = token_it_read(&it);
         if(token && token->kind == TokenBaseKind_Identifier)
         {
-            Fleury4RenderRangeHighlight(app, view_id, text_layout_id,
-                                        Ii64(token->pos, token->pos + token->size));
+            F4_RenderRangeHighlight(app, view_id, text_layout_id,
+                                    Ii64(token->pos, token->pos + token->size));
         }
     }
     
@@ -1403,13 +1411,13 @@ Fleury4RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id,
     
     // NOTE(rjf): Divider Comments
     {
-        Fleury4RenderDividerComments(app, buffer, view_id, text_layout_id);
+        F4_RenderDividerComments(app, buffer, view_id, text_layout_id);
     }
     
     // NOTE(rjf): Cursor Mark Range
     if(is_active_view)
     {
-        Fleury4HighlightCursorMarkRange(app, view_id);
+        F4_HighlightCursorMarkRange(app, view_id);
     }
     
     // NOTE(allen): Cursor shape
@@ -1422,7 +1430,7 @@ Fleury4RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id,
     {
         case FCoderMode_Original:
         {
-            Fleury4RenderCursor(app, view_id, is_active_view, buffer, text_layout_id, cursor_roundness, mark_thickness, frame_info);
+            F4_RenderCursor(app, view_id, is_active_view, buffer, text_layout_id, cursor_roundness, mark_thickness, frame_info);
             break;
         }
         
@@ -1435,17 +1443,17 @@ Fleury4RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id,
     
     // NOTE(rjf): Brace annotations
     {
-        Fleury4RenderCloseBraceAnnotation(app, buffer, text_layout_id, cursor_pos);
+        F4_RenderCloseBraceAnnotation(app, buffer, text_layout_id, cursor_pos);
     }
     
     // NOTE(rjf): Mark Annotation
     {
-        Fleury4RenderMarkAnnotation(app, buffer, text_layout_id, view_id, is_active_view);
+        F4_RenderMarkAnnotation(app, buffer, text_layout_id, view_id, is_active_view);
     }
     
     // NOTE(rjf): Brace lines
     {
-        Fleury4RenderBraceLines(app, buffer, view_id, text_layout_id, cursor_pos);
+        F4_RenderBraceLines(app, buffer, view_id, text_layout_id, cursor_pos);
     }
     
     // NOTE(allen): put the actual text on the actual screen
@@ -1467,13 +1475,13 @@ Fleury4RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id,
         Buffer_ID calc_buffer_id = get_buffer_by_name(app, string_u8_litexpr("*calc*"), AccessFlag_Read);
         if(calc_buffer_id == buffer)
         {
-            Fleury4RenderCalcBuffer(app, buffer, view_id, text_layout_id, frame_info);
+            F4_RenderCalcBuffer(app, buffer, view_id, text_layout_id, frame_info);
         }
     }
     
     // NOTE(rjf): Draw calc comments.
     {
-        Fleury4RenderCalcComments(app, buffer, view_id, text_layout_id, frame_info);
+        F4_RenderCalcComments(app, buffer, view_id, text_layout_id, frame_info);
     }
     
     draw_set_clip(app, prev_clip);
@@ -1485,20 +1493,20 @@ Fleury4RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id,
         {
             if(buffer == global_code_peek_token_buffer)
             {
-                Fleury4RenderRangeHighlight(app, view_id, text_layout_id, global_code_peek_token_range);
+                F4_RenderRangeHighlight(app, view_id, text_layout_id, global_code_peek_token_range);
             }
-            Fleury4RenderCodePeek(app, view_id, global_small_code_face, buffer, frame_info);
+            F4_RenderCodePeek(app, view_id, global_small_code_face, buffer, frame_info);
         }
         else
         {
             // NOTE(rjf): Function helper
             {
-                Fleury4RenderFunctionHelper(app, view_id, buffer, text_layout_id, cursor_pos);
+                F4_RenderFunctionHelper(app, view_id, buffer, text_layout_id, cursor_pos);
             }
             
             // NOTE(rjf): Type helper
             {
-                // Fleury4RenderTypeHelper(app, buffer, cursor_pos);
+                // F4_RenderTypeHelper(app, buffer, cursor_pos);
             }
         }
         
@@ -1532,7 +1540,7 @@ Fleury4RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id,
                     tooltip_rect.x0 = (float)(int)(tooltip_rect.x0 - difference);
                 }
                 
-                Fleury4DrawTooltipRect(app, tooltip_rect);
+                F4_DrawTooltipRect(app, tooltip_rect);
                 
                 draw_string(app, tooltip_face_id, string,
                             V2f32(tooltip_rect.x0 + 4,
@@ -1544,7 +1552,7 @@ Fleury4RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id,
     
     // NOTE(rjf): Draw power mode.
     {
-        Fleury4RenderPowerMode(app, view_id, face_id, frame_info);
+        F4_RenderPowerMode(app, view_id, face_id, frame_info);
     }
     
 }
@@ -1552,7 +1560,7 @@ Fleury4RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id,
 //~ NOTE(rjf): Render hook
 
 static void
-Fleury4Render(Application_Links *app, Frame_Info frame_info, View_ID view_id)
+F4_Render(Application_Links *app, Frame_Info frame_info, View_ID view_id)
 {
     ProfileScope(app, "[Fleury] Render");
     View_ID active_view = get_active_view(app, Access_Always);
@@ -1631,6 +1639,7 @@ Fleury4Render(Application_Links *app, Frame_Info frame_info, View_ID view_id)
     {
         Rect_f32_Pair pair = layout_line_number_margin(app, buffer, region, digit_advance);
         line_number_rect = pair.min;
+        line_number_rect.x1 += 4;
         region = pair.max;
     }
     
@@ -1650,7 +1659,7 @@ Fleury4Render(Application_Links *app, Frame_Info frame_info, View_ID view_id)
     }
     
     // NOTE(allen): draw the buffer
-    Fleury4RenderBuffer(app, view_id, face_id, buffer, text_layout_id, region, frame_info);
+    F4_RenderBuffer(app, view_id, face_id, buffer, text_layout_id, region, frame_info);
     
     text_layout_free(app, text_layout_id);
     draw_set_clip(app, prev_clip);
@@ -1658,7 +1667,7 @@ Fleury4Render(Application_Links *app, Frame_Info frame_info, View_ID view_id)
 
 //~ NOTE(rjf): Begin buffer hook
 
-BUFFER_HOOK_SIG(Fleury4BeginBuffer)
+BUFFER_HOOK_SIG(F4_BeginBuffer)
 {
     ProfileScope(app, "[Fleury] Begin Buffer");
     
@@ -1743,7 +1752,7 @@ BUFFER_HOOK_SIG(Fleury4BeginBuffer)
 //~ NOTE(rjf): Layout
 
 static Layout_Item_List
-Fleury4LayoutInner(Application_Links *app, Arena *arena, Buffer_ID buffer, Range_i64 range, Face_ID face, f32 width, Layout_Virtual_Indent virt_indent){
+F4_LayoutInner(Application_Links *app, Arena *arena, Buffer_ID buffer, Range_i64 range, Face_ID face, f32 width, Layout_Virtual_Indent virt_indent){
     Layout_Item_List list = get_empty_item_list(range);
     
     Scratch_Block scratch(app);
@@ -1820,19 +1829,26 @@ Fleury4LayoutInner(Application_Links *app, Arena *arena, Buffer_ID buffer, Range
 }
 
 static Layout_Item_List
-Fleury4Layout(Application_Links *app, Arena *arena, Buffer_ID buffer, Range_i64 range, Face_ID face, f32 width)
+F4_Layout(Application_Links *app, Arena *arena, Buffer_ID buffer, Range_i64 range, Face_ID face, f32 width)
 {
-    return(Fleury4LayoutInner(app, arena, buffer, range, face, width, LayoutVirtualIndent_Off));
+    return(F4_LayoutInner(app, arena, buffer, range, face, width, LayoutVirtualIndent_Off));
 }
 
 //~ NOTE(rjf): Tick
 
 static void
-Fleury4Tick(Application_Links *app, Frame_Info frame_info)
+F4_Tick(Application_Links *app, Frame_Info frame_info)
 {
     // NOTE(rjf): Default tick stuff from the 4th dimension:
     default_tick(app, frame_info);
-    static char frame_arena_memory[1024*1024*1024];
-    global_frame_arena = MemoryArenaInit(frame_arena_memory, sizeof(frame_arena_memory));
+    linalloc_clear(&global_frame_arena);
     global_tooltip_count = 0;
+}
+
+//~ NOTE(rjf): Whole Screen Render Hook
+
+function void
+F4_WholeScreenRender(Application_Links *app, Frame_Info frame_info)
+{
+    
 }

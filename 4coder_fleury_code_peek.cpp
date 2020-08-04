@@ -1,10 +1,10 @@
 
 //~ NOTE(rjf): Code Peek
 
-static void Fleury4OpenCodePeek(Application_Links *app, String_Const_u8 base_needle, String_Match_Flag must_have_flags, String_Match_Flag must_not_have_flags);
-static void Fleury4CloseCodePeek(void);
-static void Fleury4NextCodePeek(void);
-static void Fleury4CodePeekGo(Application_Links *app);
+static void F4_OpenCodePeek(Application_Links *app, String_Const_u8 base_needle, String_Match_Flag must_have_flags, String_Match_Flag must_not_have_flags);
+static void F4_CloseCodePeek(void);
+static void F4_NextCodePeek(void);
+static void F4_CodePeekGo(Application_Links *app);
 
 struct CodePeekMatch
 {
@@ -21,7 +21,7 @@ static Buffer_ID global_code_peek_token_buffer;
 static Range_i64 global_code_peek_token_range;
 
 static String_Const_u8_Array
-Fleury4MakeTypeSearchList(Application_Links *app, Arena *arena, String_Const_u8 base_needle)
+F4_MakeTypeSearchList(Application_Links *app, Arena *arena, String_Const_u8 base_needle)
 {
     String_Const_u8_Array result = {0};
     if(base_needle.size > 0)
@@ -45,8 +45,8 @@ Fleury4MakeTypeSearchList(Application_Links *app, Arena *arena, String_Const_u8 
 
 
 static void
-Fleury4OpenCodePeek(Application_Links *app, String_Const_u8 base_needle,
-                    String_Match_Flag must_have_flags, String_Match_Flag must_not_have_flags)
+F4_OpenCodePeek(Application_Links *app, String_Const_u8 base_needle,
+                String_Match_Flag must_have_flags, String_Match_Flag must_not_have_flags)
 {
     Scratch_Block scratch(app);
     
@@ -95,7 +95,7 @@ Fleury4OpenCodePeek(Application_Links *app, String_Const_u8 base_needle,
     if(global_code_peek_match_count == 0)
     {
         
-        String_Const_u8_Array type_array = Fleury4MakeTypeSearchList(app, scratch, base_needle);
+        String_Const_u8_Array type_array = F4_MakeTypeSearchList(app, scratch, base_needle);
         String_Match_List matches = find_all_matches_all_buffers(app, scratch, type_array, must_have_flags, must_not_have_flags);
         string_match_list_filter_remove_buffer_predicate(app, &matches, buffer_has_name_with_star);
         
@@ -151,13 +151,13 @@ Fleury4OpenCodePeek(Application_Links *app, String_Const_u8 base_needle,
 }
 
 static void
-Fleury4CloseCodePeek(void)
+F4_CloseCodePeek(void)
 {
     global_code_peek_open = 0;
 }
 
 static void
-Fleury4NextCodePeek(void)
+F4_NextCodePeek(void)
 {
     if(++global_code_peek_selected_index >= global_code_peek_match_count)
     {
@@ -172,7 +172,7 @@ Fleury4NextCodePeek(void)
 }
 
 static void
-Fleury4CodePeekGo(Application_Links *app, b32 same_panel)
+F4_CodePeekGo(Application_Links *app, b32 same_panel)
 {
     if(global_code_peek_selected_index >= 0 && global_code_peek_selected_index < global_code_peek_match_count &&
        global_code_peek_match_count > 0)
@@ -190,13 +190,13 @@ Fleury4CodePeekGo(Application_Links *app, b32 same_panel)
         Buffer_Scroll scroll = view_get_buffer_scroll(app, view);
         scroll.position.line_number = scroll.target.line_number = line_number;
         view_set_buffer_scroll(app, view, scroll, SetBufferScroll_SnapCursorIntoView);
-        Fleury4CloseCodePeek();
+        F4_CloseCodePeek();
     }
 }
 
 static void
-Fleury4RenderCodePeek(Application_Links *app, View_ID view_id, Face_ID face_id,
-                      Buffer_ID buffer, Frame_Info frame_info)
+F4_RenderCodePeek(Application_Links *app, View_ID view_id, Face_ID face_id,
+                  Buffer_ID buffer, Frame_Info frame_info)
 {
     Scratch_Block scratch(app);
     
@@ -225,7 +225,7 @@ Fleury4RenderCodePeek(Application_Links *app, View_ID view_id, Face_ID face_id,
             rect.x1 -= difference;
         }
         
-        Fleury4DrawTooltipRect(app, rect);
+        F4_DrawTooltipRect(app, rect);
         
         //Face_Metrics metrics = get_face_metrics(app, face_id);
         
@@ -275,7 +275,7 @@ Fleury4RenderCodePeek(Application_Links *app, View_ID view_id, Face_ID face_id,
                     Token_Array token_array = get_token_array_from_buffer(app, match->jump.buffer);
                     if(token_array.tokens != 0)
                     {
-                        Fleury4DrawCTokenColors(app, text_layout_id, &token_array);
+                        F4_DrawCTokenColors(app, text_layout_id, &token_array);
                     }
                     else
                     {
@@ -305,7 +305,7 @@ CUSTOM_DOC("Opens code peek.")
     if(global_code_peek_open && pos >= global_code_peek_token_range.start &&
        pos <= global_code_peek_token_range.end)
     {
-        Fleury4NextCodePeek();
+        F4_NextCodePeek();
     }
     else
     {
@@ -315,7 +315,7 @@ CUSTOM_DOC("Opens code peek.")
         global_code_peek_token_range = range;
         global_code_peek_token_buffer = buffer;
         String_Const_u8 base_needle = push_token_or_word_under_active_cursor(app, scratch);
-        Fleury4OpenCodePeek(app, base_needle, StringMatch_CaseSensitive, StringMatch_LeftSideSloppy | StringMatch_RightSideSloppy);
+        F4_OpenCodePeek(app, base_needle, StringMatch_CaseSensitive, StringMatch_LeftSideSloppy | StringMatch_RightSideSloppy);
     }
 }
 
@@ -324,7 +324,7 @@ CUSTOM_DOC("Closes code peek.")
 {
     if(global_code_peek_open)
     {
-        Fleury4CloseCodePeek();
+        F4_CloseCodePeek();
     }
     else
     {
@@ -335,11 +335,11 @@ CUSTOM_DOC("Closes code peek.")
 CUSTOM_COMMAND_SIG(fleury_code_peek_go)
 CUSTOM_DOC("Goes to the active code peek.")
 {
-    Fleury4CodePeekGo(app, 0);
+    F4_CodePeekGo(app, 0);
 }
 
 CUSTOM_COMMAND_SIG(fleury_code_peek_go_same_panel)
 CUSTOM_DOC("Goes to the active code peek.")
 {
-    Fleury4CodePeekGo(app, 1);
+    F4_CodePeekGo(app, 1);
 }

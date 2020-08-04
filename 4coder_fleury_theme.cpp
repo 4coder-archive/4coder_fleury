@@ -1,11 +1,11 @@
 
 //~ NOTE(rjf): Light/Dark Mode
 
-static void Fleury4LightMode(Application_Links *app);
-static void Fleury4DarkMode(Application_Links *app);
+static void F4_LightMode(Application_Links *app);
+static void F4_DarkMode(Application_Links *app);
 
 static void
-Fleury4LightMode(Application_Links *app)
+F4_LightMode(Application_Links *app)
 {
     Color_Table *table = &active_color_table;
     Arena *arena = &global_theme_arena;
@@ -53,7 +53,7 @@ Fleury4LightMode(Application_Links *app)
 }
 
 static void
-Fleury4DarkMode(Application_Links *app)
+F4_DarkMode(Application_Links *app)
 {
     Color_Table *table = &active_color_table;
     Arena *arena = &global_theme_arena;
@@ -105,12 +105,12 @@ CUSTOM_DOC("Toggles light/dark mode.")
 {
     if(global_dark_mode)
     {
-        Fleury4LightMode(app);
+        F4_LightMode(app);
         global_dark_mode = 0;
     }
     else
     {
-        Fleury4DarkMode(app);
+        F4_DarkMode(app);
         global_dark_mode = 1;
     }
 }

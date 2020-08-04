@@ -338,14 +338,14 @@ struct CalcNode
     CalcNode *next;
     CalcToken token;
     int num_params;
-    char *error_string;
+    String_Const_u8 error_string;
     char *at_source;
 };
 
 static CalcNode *
-AllocateCalcNode(MemoryArena *arena, CalcNodeType type, char *at_source)
+AllocateCalcNode(Arena *arena, CalcNodeType type, char *at_source)
 {
-    CalcNode *node = (CalcNode *)MemoryArenaAllocate(arena, sizeof(*node));
+    CalcNode *node = push_array(arena, CalcNode, 1);
     MemorySet(node, 0, sizeof(*node));
     node->type = type;
     node->at_source = at_source;
@@ -353,31 +353,22 @@ AllocateCalcNode(MemoryArena *arena, CalcNodeType type, char *at_source)
 }
 
 static CalcNode *
-ErrorCalcNode(MemoryArena *arena, char *format, ...)
+ErrorCalcNode(Arena *arena, char *format, ...)
 {
-    CalcNode *node = (CalcNode *)MemoryArenaAllocate(arena, sizeof(*node));
+    CalcNode *node = push_array(arena, CalcNode, 1);
     MemorySet(node, 0, sizeof(*node));
     node->type = CALC_NODE_TYPE_error;
-    
     va_list args;
     va_start(args, format);
-    int required_bytes = vsnprintf(0, 0, format, args) + 1;
+    node->error_string = push_stringfv(arena, format, args);
     va_end(args);
-    
-    node->error_string = (char *)MemoryArenaAllocate(arena, required_bytes);
-    
-    va_start(args, format);
-    vsnprintf(node->error_string, required_bytes, format, args);
-    node->error_string[required_bytes-1] = 0;
-    va_end(args);
-    
     return node;
 }
 
-static CalcNode *ParseCalcExpression(MemoryArena *arena, char **at_ptr);
+static CalcNode *ParseCalcExpression(Arena *arena, char **at_ptr);
 
 static CalcNode *
-ParseCalcUnaryExpression(MemoryArena *arena, char **at_ptr)
+ParseCalcUnaryExpression(Arena *arena, char **at_ptr)
 {
     CalcNode *expression = 0;
     CalcToken token = PeekCalcToken(at_ptr);
@@ -478,7 +469,11 @@ ParseCalcUnaryExpression(MemoryArena *arena, char **at_ptr)
             }
             
             CalcNode *member_expression = ParseCalcExpression(arena, at_ptr);
-            while(RequireCalcToken(at_ptr, ","));
+            if(!RequireCalcToken(at_ptr, ","))
+            {
+                expression = ErrorCalcNode(arena, "Missing ','.");
+                goto end_parse;
+            }
             if(member_expression)
             {
                 *target_member = member_expression;
@@ -502,24 +497,27 @@ ParseCalcUnaryExpression(MemoryArena *arena, char **at_ptr)
     }
     
     // NOTE(rjf): Array index.
-    while(RequireCalcToken(at_ptr, "["))
+    if(expression)
     {
-        CalcNode *old_expr = expression;
-        expression = AllocateCalcNode(arena, CALC_NODE_TYPE_array_index, at_source);
-        expression->token = token;
-        expression->left = old_expr;
-        expression->right = ParseCalcExpression(arena, at_ptr);
-        
-        if(!expression->right)
+        while(RequireCalcToken(at_ptr, "["))
         {
-            expression = ErrorCalcNode(arena, "Missing array index inside of '[' and ']'.");
-            goto end_parse;
-        }
-        
-        if(!RequireCalcToken(at_ptr, "]"))
-        {
-            expression = ErrorCalcNode(arena, "Missing ']'.");
-            goto end_parse;
+            CalcNode *old_expr = expression;
+            expression = AllocateCalcNode(arena, CALC_NODE_TYPE_array_index, at_source);
+            expression->token = token;
+            expression->left = old_expr;
+            expression->right = ParseCalcExpression(arena, at_ptr);
+            
+            if(!expression->right)
+            {
+                expression = ErrorCalcNode(arena, "Missing array index inside of '[' and ']'.");
+                goto end_parse;
+            }
+            
+            if(!RequireCalcToken(at_ptr, "]"))
+            {
+                expression = ErrorCalcNode(arena, "Missing ']'.");
+                goto end_parse;
+            }
         }
     }
     
@@ -563,7 +561,7 @@ GetCalcBinaryOperatorTypeFromToken(CalcToken token)
 }
 
 static CalcNode *
-ParseCalcExpression_(MemoryArena *arena, char **at_ptr, int precedence_in)
+ParseCalcExpression_(Arena *arena, char **at_ptr, int precedence_in)
 {
     CalcNode *expression = ParseCalcUnaryExpression(arena, at_ptr);
     
@@ -623,13 +621,13 @@ ParseCalcExpression_(MemoryArena *arena, char **at_ptr, int precedence_in)
 }
 
 static CalcNode *
-ParseCalcExpression(MemoryArena *arena, char **at_ptr)
+ParseCalcExpression(Arena *arena, char **at_ptr)
 {
     return ParseCalcExpression_(arena, at_ptr, 1);
 }
 
 static CalcNode *
-ParseCalcCode(MemoryArena *arena, char **at_ptr)
+ParseCalcCode(Arena *arena, char **at_ptr)
 {
     CalcNode *root = 0;
     CalcNode **target = &root;
@@ -740,8 +738,7 @@ struct CalcValue
     {
         struct
         {
-            int string_length;
-            char *as_string;
+            String_Const_u8 as_string;
         };
         
         struct
@@ -752,7 +749,7 @@ struct CalcValue
         
         struct
         {
-            char *as_error;
+            String_Const_u8 as_error;
         };
         
         struct
@@ -816,7 +813,7 @@ CalcValueF64(double num)
 }
 
 static CalcValue
-CalcValueError(char *string)
+CalcValueError(String_Const_u8 string)
 {
     CalcValue val = {0};
     val.type = CALC_TYPE_error;
@@ -825,12 +822,11 @@ CalcValueError(char *string)
 }
 
 static CalcValue
-CalcValueString(char *string, int string_length)
+CalcValueString(String_Const_u8 string)
 {
     CalcValue val = {0};
     val.type = CALC_TYPE_string;
     val.as_string = string;
-    val.string_length = string_length;
     return val;
 }
 
@@ -849,19 +845,16 @@ struct CalcInterpretContext
     Application_Links *app;
     Buffer_ID buffer;
     Text_Layout_ID text_layout_id;
-    MemoryArena *arena;
+    Arena *arena;
     CalcSymbolTable *symbol_table;
     f32 current_time;
     
     // NOTE(rjf): Plot data.
     struct
     {
-        char *plot_title;
-        int plot_title_length;
-        char *x_axis;
-        int x_axis_length;
-        char *y_axis;
-        int y_axis_length;
+        String_Const_u8 plot_title;
+        String_Const_u8 x_axis;
+        String_Const_u8 y_axis;
         Rect_f32 plot_view;
         int num_function_samples;
         int num_bins;
@@ -888,8 +881,7 @@ CalcValueArray(CalcInterpretContext *context, CalcNode *first_member)
         ++count;
     }
     
-    // NOTE(rjf): WHY DOESN'T C++ ALLOW IMPLICIT POINTER CASTING THIS SUCKS SO BAD
-    CalcValue *array = (CalcValue *)MemoryArenaAllocate(context->arena, count*sizeof(*array));
+    CalcValue *array = push_array(context->arena, CalcValue, count);
     
     int write_pos = 0;
     
@@ -907,7 +899,7 @@ CalcValueArray(CalcInterpretContext *context, CalcNode *first_member)
             }
             else if(array_type == CALC_TYPE_none)
             {
-                val = CalcValueError("Cannot make arrays of 'none' type.");
+                val = CalcValueError(string_u8_litexpr("Cannot make arrays of 'none' type."));
                 goto end_create;
             }
         }
@@ -915,7 +907,7 @@ CalcValueArray(CalcInterpretContext *context, CalcNode *first_member)
         {
             if(result.value.type != array_type)
             {
-                val = CalcValueError("Cannot have multiple types in an array.");
+                val = CalcValueError(string_u8_litexpr("Cannot have multiple types in an array."));
                 goto end_create;
             }
         }
@@ -934,12 +926,12 @@ CalcValueArray(CalcInterpretContext *context, CalcNode *first_member)
 }
 
 static CalcSymbolTable
-CalcSymbolTableInit(MemoryArena *arena, unsigned int size)
+CalcSymbolTableInit(Arena *arena, unsigned int size)
 {
     CalcSymbolTable table = {0};
     table.size = size;
-    table.keys = (CalcSymbolKey *)MemoryArenaAllocate(arena, sizeof(*table.keys)*size);
-    table.values = (CalcSymbolValue *)MemoryArenaAllocate(arena, sizeof(*table.values)*size);
+    table.keys = push_array(arena, CalcSymbolKey, size);
+    table.values = push_array(arena, CalcSymbolValue, size);
     MemorySet(table.keys, 0, sizeof(*table.keys)*size);
     MemorySet(table.values, 0, sizeof(*table.values)*size);
     return table;
@@ -1100,7 +1092,7 @@ CalcSymbolTableRemove(CalcSymbolTable *table, char *string, int length)
 
 static void
 GetDataFromSourceCode(Application_Links *app, Buffer_ID buffer, Text_Layout_ID text_layout_id,
-                      i64 start_pos, MemoryArena *arena, float **data_ptr, int *data_count_ptr)
+                      i64 start_pos, Arena *arena, float **data_ptr, int *data_count_ptr)
 {
     Token_Array token_array = get_token_array_from_buffer(app, buffer);
     Range_i64 visible_range = text_layout_get_visible_range(app, text_layout_id);
@@ -1133,8 +1125,18 @@ GetDataFromSourceCode(Application_Links *app, Buffer_ID buffer, Text_Layout_ID t
         // NOTE(rjf): Read data.
         if(found)
         {
-            float *data = (float *)MemoryArenaAllocate(arena, 0);
-            int data_count = 0;
+            struct DataChunk
+            {
+                DataChunk *next;
+                u64 value_count;
+                float values[1024];
+            };
+            
+            u64 total_value_count = 0;
+            DataChunk *data_chunk = push_array_zero(arena, DataChunk, 1);
+            DataChunk *first_data_chunk = data_chunk;
+            DataChunk *last_data_chunk = data_chunk;
+            
             b32 is_negative = 0;
             for(;;)
             {
@@ -1165,12 +1167,30 @@ GetDataFromSourceCode(Application_Links *app, Buffer_ID buffer, Text_Layout_ID t
                     float sign = is_negative ? -1.f : 1.f;
                     is_negative = 0;
                     
-                    MemoryArenaAllocate(arena, sizeof(data[0]));
-                    data[data_count++] = sign * (float)GetFirstDoubleFromBuffer((char *)token_buffer);
+                    float value = sign * (float)GetFirstDoubleFromBuffer((char *)token_buffer);
+                    if(last_data_chunk->value_count >= ArrayCount(last_data_chunk->values))
+                    {
+                        DataChunk *new_chunk = push_array_zero(arena, DataChunk, 1);
+                        last_data_chunk->next = new_chunk;
+                        last_data_chunk = new_chunk;
+                    }
+                    last_data_chunk->values[last_data_chunk->value_count++] = value;
+                    total_value_count += 1;
                 }
                 else if(token->kind == TokenBaseKind_ScopeClose)
                 {
                     break;
+                }
+            }
+            
+            int data_count = 0;
+            float *data = push_array_zero(arena, float, total_value_count);
+            for(DataChunk *chunk = first_data_chunk; chunk; chunk = chunk->next)
+            {
+                for(int i = 0; i < ArrayCount(chunk->values); i += 1)
+                {
+                    data[data_count] = chunk->values[i];
+                    data_count += 1;
                 }
             }
             
@@ -1215,9 +1235,7 @@ GraphCalcExpression(Application_Links *app, Face_ID face_id,
         if(first_graph->num_bins > 0)
         {
             plot_data.bin_group_count = plot_count;
-            plot_data.bins = (int *)MemoryArenaAllocate(context->arena, sizeof(*plot_data.bins)*plot_data.num_bins*
-                                                        plot_data.bin_group_count);
-            MemorySet(plot_data.bins, 0, sizeof(*plot_data.bins)*plot_data.num_bins*plot_data.bin_group_count);
+            plot_data.bins = push_array_zero(context->arena, int, plot_data.num_bins*plot_data.bin_group_count);
         }
     }
     Plot2DBegin(&plot_data);
@@ -1349,8 +1367,9 @@ CALC_BUILT_IN_FUNCTION(CalcAbs)
 static
 CALC_BUILT_IN_FUNCTION(CalcPlotTitle)
 {
-    context->plot_title = params[0].value.as_string + 1;
-    context->plot_title_length = params[0].value.string_length - 2;
+    context->plot_title = params[0].value.as_string;
+    context->plot_title.str += 1;
+    context->plot_title.size -= 2;
     CalcInterpretResult result = {0};
     result.value = CalcValueNone();
     return result;
@@ -1412,18 +1431,25 @@ GenerateLinePlotData(CalcInterpretContext *context, CalcNode *expression,
     {
         style_flags |= PLOT2D_POINTS;
         
-        // NOTE(rjf): Just Y data.
-        if(expression_result.value.array_count > 0 &&
-           expression_result.value.as_array[0].type == CALC_TYPE_number)
+        // NOTE(rjf): X/Y data arrays.
+        if(expression_result.value.array_count == 2 &&
+           expression_result.value.as_array[0].type == CALC_TYPE_array &&
+           expression_result.value.as_array[1].type == CALC_TYPE_array &&
+           expression_result.value.as_array[0].array_count > 0 &&
+           expression_result.value.as_array[0].array_count ==
+           expression_result.value.as_array[1].array_count &&
+           expression_result.value.as_array[0].as_array[0].type ==
+           expression_result.value.as_array[1].as_array[0].type &&
+           expression_result.value.as_array[0].as_array[0].type == CALC_TYPE_number)
         {
-            int values_to_plot = expression_result.value.array_count;
-            float *x_values = (float *)MemoryArenaAllocate(context->arena, sizeof(float)*values_to_plot);
-            float *y_values = (float *)MemoryArenaAllocate(context->arena, sizeof(float)*values_to_plot);
+            int values_to_plot = expression_result.value.as_array[0].array_count;
+            float *x_values = push_array(context->arena, float, values_to_plot);
+            float *y_values = push_array(context->arena, float, values_to_plot);
             
             for(int i = 0; i < values_to_plot; ++i)
             {
-                x_values[i] = (float)i;
-                y_values[i] = (float)expression_result.value.as_array[i].as_f64;
+                x_values[i] = (float)expression_result.value.as_array[0].as_array[i].as_f64;
+                y_values[i] = (float)expression_result.value.as_array[1].as_array[i].as_f64;
             }
             
             *x_data = x_values;
@@ -1431,25 +1457,18 @@ GenerateLinePlotData(CalcInterpretContext *context, CalcNode *expression,
             *data_count = values_to_plot;
         }
         
-        // NOTE(rjf): X/Y data arrays.
-        else if(expression_result.value.array_count == 2 &&
-                expression_result.value.as_array[0].type == CALC_TYPE_array &&
-                expression_result.value.as_array[1].type == CALC_TYPE_array &&
-                expression_result.value.as_array[0].array_count > 0 &&
-                expression_result.value.as_array[0].array_count ==
-                expression_result.value.as_array[1].array_count &&
-                expression_result.value.as_array[0].as_array[0].type ==
-                expression_result.value.as_array[1].as_array[0].type &&
-                expression_result.value.as_array[0].as_array[0].type == CALC_TYPE_number)
+        // NOTE(rjf): Just Y data.
+        else if(expression_result.value.array_count > 0 &&
+                expression_result.value.as_array[0].type == CALC_TYPE_number)
         {
-            int values_to_plot = expression_result.value.as_array[0].array_count;
-            float *x_values = (float *)MemoryArenaAllocate(context->arena, sizeof(float)*values_to_plot);
-            float *y_values = (float *)MemoryArenaAllocate(context->arena, sizeof(float)*values_to_plot);
+            int values_to_plot = expression_result.value.array_count;
+            float *x_values = push_array(context->arena, float, values_to_plot);
+            float *y_values = push_array(context->arena, float, values_to_plot);
             
             for(int i = 0; i < values_to_plot; ++i)
             {
-                x_values[i] = (float)expression_result.value.as_array[0].as_array[i].as_f64;
-                y_values[i] = (float)expression_result.value.as_array[1].as_array[i].as_f64;
+                x_values[i] = (float)i;
+                y_values[i] = (float)expression_result.value.as_array[i].as_f64;
             }
             
             *x_data = x_values;
@@ -1474,7 +1493,7 @@ GenerateLinePlotData(CalcInterpretContext *context, CalcNode *expression,
         // NOTE(rjf): Plot data.
         if(y_values && values_to_plot)
         {
-            float *x_values = (float *)MemoryArenaAllocate(context->arena, values_to_plot * sizeof(*x_values));
+            float *x_values = push_array(context->arena, float, values_to_plot);
             for(int i = 0; i < values_to_plot; ++i)
             {
                 x_values[i] = (float)i;
@@ -1503,8 +1522,8 @@ GenerateLinePlotData(CalcInterpretContext *context, CalcNode *expression,
         
         // NOTE(rjf): Find function sample points.
         int values_to_plot = context->num_function_samples;
-        float *x_values = (float *)MemoryArenaAllocate(context->arena, values_to_plot * sizeof(*x_values));
-        float *y_values = (float *)MemoryArenaAllocate(context->arena, values_to_plot * sizeof(*y_values));
+        float *x_values = push_array(context->arena, float, values_to_plot);
+        float *y_values = push_array(context->arena, float, values_to_plot);
         {
             for(int i = 0; i < values_to_plot; ++i)
             {
@@ -1559,7 +1578,7 @@ GenerateHistogramPlotData(CalcInterpretContext *context, CalcNode *expression,
            expression_result.value.as_array[0].type == CALC_TYPE_number)
         {
             int values_to_plot = expression_result.value.array_count;
-            float *values = (float *)MemoryArenaAllocate(context->arena, sizeof(float)*values_to_plot);
+            float *values = push_array(context->arena, float, values_to_plot);
             
             for(int i = 0; i < values_to_plot; ++i)
             {
@@ -1609,7 +1628,7 @@ CallCalcBuiltInFunction(CalcInterpretContext *context, CalcNode *root)
     
     if(!root || root->type != CALC_NODE_TYPE_function_call)
     {
-        result.value = CalcValueError("Internal parsing error, function call expected.");
+        result.value = CalcValueError(string_u8_litexpr("Internal parsing error, function call expected."));
         goto end_func_call;
     }
     
@@ -1681,9 +1700,8 @@ CallCalcBuiltInFunction(CalcInterpretContext *context, CalcNode *root)
             
             if(param_count < functions[i].required_parameter_count)
             {
-                char *error_string =
-                    MakeCStringOnMemoryArena(context->arena, "%s expects at least %i parameters.",
-                                             functions[i].name, functions[i].required_parameter_count);
+                String_Const_u8 error_string = push_stringf(context->arena, "%s expects at least %i parameters.",
+                                                            functions[i].name, functions[i].required_parameter_count);
                 result.value = CalcValueError(error_string);
                 correct_call = 0;
             }
@@ -1695,10 +1713,9 @@ CallCalcBuiltInFunction(CalcInterpretContext *context, CalcNode *root)
                     if(param_results[j].value.type != functions[i].parameter_types[j])
                     {
                         correct_call = 0;
-                        char *error_string =
-                            MakeCStringOnMemoryArena(context->arena, "'%s' expects a '%s' for parameter %i.",
-                                                     functions[i].name, CalcTypeName(functions[i].parameter_types[j]),
-                                                     j+1);
+                        String_Const_u8 error_string = push_stringf(context->arena, "'%s' expects a '%s' for parameter %i.",
+                                                                    functions[i].name, CalcTypeName(functions[i].parameter_types[j]),
+                                                                    j+1);
                         result.value = CalcValueError(error_string);
                         break;
                     }
@@ -1739,8 +1756,8 @@ CallCalcBuiltInFunction(CalcInterpretContext *context, CalcNode *root)
                         if(title_param)
                         {
                             result.value = CalcValueError(is_y_axis
-                                                          ? (char *)"plot_yaxis only accepts one string."
-                                                          : (char *)"plot_xaxis only accepts one string.");
+                                                          ? string_u8_litexpr("plot_yaxis only accepts one string.")
+                                                          : string_u8_litexpr("plot_xaxis only accepts one string."));
                             goto end_func_call;
                         }
                         else
@@ -1756,8 +1773,8 @@ CallCalcBuiltInFunction(CalcInterpretContext *context, CalcNode *root)
                             if(high_param)
                             {
                                 result.value = CalcValueError(is_y_axis
-                                                              ? (char *)"plot_yaxis only accepts two numbers."
-                                                              : (char *)"plot_xaxis only accepts two numbers.");
+                                                              ? string_u8_litexpr("plot_yaxis only accepts two numbers.")
+                                                              : string_u8_litexpr("plot_xaxis only accepts two numbers."));
                                 
                                 goto end_func_call;
                             }
@@ -1784,15 +1801,13 @@ CallCalcBuiltInFunction(CalcInterpretContext *context, CalcNode *root)
                 {
                     if(is_y_axis)
                     {
-                        if(title_result.value.as_string)
+                        if(title_result.value.as_string.size)
                         {
-                            context->y_axis = title_result.value.as_string + 1;
-                            context->y_axis_length = title_result.value.string_length - 2;
+                            context->y_axis = StringStripBorderCharacters(title_result.value.as_string);
                         }
                         else
                         {
-                            context->y_axis = 0;
-                            context->y_axis_length = 0;
+                            context->y_axis = {};
                         }
                         
                         context->plot_view.y0 = (f32)low_result.value.as_f64;
@@ -1800,15 +1815,13 @@ CallCalcBuiltInFunction(CalcInterpretContext *context, CalcNode *root)
                     }
                     else
                     {
-                        if(title_result.value.as_string)
+                        if(title_result.value.as_string.size)
                         {
-                            context->x_axis = title_result.value.as_string + 1;
-                            context->x_axis_length = title_result.value.string_length - 2;
+                            context->x_axis = StringStripBorderCharacters(title_result.value.as_string);
                         }
                         else
                         {
-                            context->x_axis = 0;
-                            context->x_axis_length = 0;
+                            context->x_axis = {};
                         }
                         
                         context->plot_view.x0 = (f32)low_result.value.as_f64;
@@ -1818,8 +1831,8 @@ CallCalcBuiltInFunction(CalcInterpretContext *context, CalcNode *root)
                 else
                 {
                     result.value = CalcValueError(is_y_axis
-                                                  ? (char *)"plot_yaxis needs two bounds (title optional)."
-                                                  : (char *)"plot_xaxis needs two bounds (title optional).");
+                                                  ? string_u8_litexpr("plot_yaxis needs two bounds (title optional).")
+                                                  : string_u8_litexpr("plot_xaxis needs two bounds (title optional)."));
                 }
             }
             
@@ -1859,16 +1872,15 @@ CallCalcBuiltInFunction(CalcInterpretContext *context, CalcNode *root)
                     if(input_find.number_unknowns <= 1)
                     {
                         CalcNode *input_variable = input_find.unknown;
-                        CalcInterpretGraph *new_graph =
-                            (CalcInterpretGraph *)MemoryArenaAllocate(context->arena, sizeof(*new_graph));
+                        CalcInterpretGraph *new_graph = push_array_zero(context->arena, CalcInterpretGraph, 1);
                         
                         new_graph->next = 0;
                         new_graph->parent_call = root;
                         
                         new_graph->mode = mode;
-                        new_graph->plot_title = { context->plot_title, (u64)context->plot_title_length };
-                        new_graph->x_axis = { context->x_axis, (u64)context->x_axis_length };
-                        new_graph->y_axis = { context->y_axis, (u64)context->y_axis_length };
+                        new_graph->plot_title = context->plot_title;
+                        new_graph->x_axis = context->x_axis;
+                        new_graph->y_axis = context->y_axis;
                         
                         new_graph->num_function_samples = context->num_function_samples;
                         new_graph->plot_view = context->plot_view;
@@ -1899,7 +1911,7 @@ CallCalcBuiltInFunction(CalcInterpretContext *context, CalcNode *root)
                     }
                     else
                     {
-                        result.value = CalcValueError("Too many unknowns in graphing expression.");
+                        result.value = CalcValueError(string_u8_litexpr("Too many unknowns in graphing expression."));
                         break;
                     }
                 }
@@ -1912,7 +1924,7 @@ CallCalcBuiltInFunction(CalcInterpretContext *context, CalcNode *root)
     
     if(!function_valid)
     {
-        result.value = CalcValueError("Unknown function.");
+        result.value = CalcValueError(string_u8_litexpr("Unknown function."));
     }
     
     return result;
@@ -1925,7 +1937,7 @@ InterpretCalcExpression(CalcInterpretContext *context, CalcNode *root)
     
     if(root == 0)
     {
-        result.value = CalcValueError("Syntax error.");
+        result.value = CalcValueError(string_u8_litexpr("Syntax error."));
     }
     else
     {
@@ -1965,18 +1977,18 @@ InterpretCalcExpression(CalcInterpretContext *context, CalcNode *root)
                         }
                         else
                         {
-                            result.value = CalcValueError("Array index out of bounds.");
+                            result.value = CalcValueError(string_u8_litexpr("Array index out of bounds."));
                         }
                     }
                     else
                     {
-                        result.value = CalcValueError("Cannot use non-numbers to index arrays.");
+                        result.value = CalcValueError(string_u8_litexpr("Cannot use non-numbers to index arrays."));
                         goto end_interpret;
                     }
                 }
                 else
                 {
-                    result.value = CalcValueError("Cannot index a non-array.");
+                    result.value = CalcValueError(string_u8_litexpr("Cannot index a non-array."));
                     goto end_interpret;
                 }
                 
@@ -1985,7 +1997,7 @@ InterpretCalcExpression(CalcInterpretContext *context, CalcNode *root)
             
             case CALC_NODE_TYPE_string_constant:
             {
-                result.value = CalcValueString(root->token.string, root->token.string_length);
+                result.value = CalcValueString({root->token.string, (u64)root->token.string_length});
                 break;
             }
             
@@ -2015,7 +2027,7 @@ InterpretCalcExpression(CalcInterpretContext *context, CalcNode *root)
                     else if(left_result.value.type != CALC_TYPE_number ||
                             right_result.value.type != CALC_TYPE_number)
                     {
-                        result.value = CalcValueError("Cannot use non-numbers in expressions.");
+                        result.value = CalcValueError(string_u8_litexpr("Cannot use non-numbers in expressions."));
                         goto end_interpret;
                     }
                     
@@ -2058,7 +2070,7 @@ InterpretCalcExpression(CalcInterpretContext *context, CalcNode *root)
                 }
                 else
                 {
-                    result.value = CalcValueError("Binary operators require two operands.");
+                    result.value = CalcValueError(string_u8_litexpr("Binary operators require two operands."));
                 }
                 
                 break;
@@ -2085,7 +2097,7 @@ InterpretCalcExpression(CalcInterpretContext *context, CalcNode *root)
                 result.value = CalcSymbolTableLookup(context->symbol_table, root->token.string, root->token.string_length);
                 if(result.value.type == CALC_TYPE_error)
                 {
-                    result.value = CalcValueError(MakeCStringOnMemoryArena(context->arena, "'%.*s' is not declared.", root->token.string_length, root->token.string));
+                    result.value = CalcValueError(push_stringf(context->arena, "'%.*s' is not declared.", root->token.string_length, root->token.string));
                 }
                 
                 break;
@@ -2197,13 +2209,13 @@ InterpretCalcCode(CalcInterpretContext *context, CalcNode *root)
                 }
                 else
                 {
-                    result.value = CalcValueError("Recursive definition.");
+                    result.value = CalcValueError(string_u8_litexpr("Recursive definition."));
                     result.first_graph = last_result.first_graph;
                 }
             }
             else
             {
-                result.value = CalcValueError("Assignment to non-identifier.");
+                result.value = CalcValueError(string_u8_litexpr("Assignment to non-identifier."));
                 result.first_graph = last_result.first_graph;
             }
         }
@@ -2237,7 +2249,7 @@ InterpretCalcCode(CalcInterpretContext *context, CalcNode *root)
 
 static CalcInterpretContext
 CalcInterpretContextInit(Application_Links *app, Buffer_ID buffer, Text_Layout_ID text_layout_id,
-                         MemoryArena *arena, CalcSymbolTable *symbol_table, f32 current_time)
+                         Arena *arena, CalcSymbolTable *symbol_table, f32 current_time)
 {
     CalcInterpretContext context = {0};
     context.app = app;
@@ -2249,12 +2261,9 @@ CalcInterpretContextInit(Application_Links *app, Buffer_ID buffer, Text_Layout_I
     
     // NOTE(rjf): Default plot settings.
     {
-        context.plot_title = "";
-        context.plot_title_length = 0;
-        context.x_axis = "x";
-        context.x_axis_length = 1;
-        context.y_axis = "y";
-        context.y_axis_length = 1;
+        context.plot_title = string_u8_litexpr("");
+        context.x_axis = string_u8_litexpr("x");
+        context.y_axis = string_u8_litexpr("y");
         context.plot_view = Rf32(-1, -1, +1, +1);
         context.num_function_samples = 128;
         context.num_bins = 10;
@@ -2266,10 +2275,10 @@ CalcInterpretContextInit(Application_Links *app, Buffer_ID buffer, Text_Layout_I
 }
 
 static void
-Fleury4RenderCalcCode(Application_Links *app, Buffer_ID buffer,
-                      View_ID view, Text_Layout_ID text_layout_id,
-                      Frame_Info frame_info, MemoryArena *arena, char *code_buffer,
-                      i64 start_char_offset)
+F4_RenderCalcCode(Application_Links *app, Buffer_ID buffer,
+                  View_ID view, Text_Layout_ID text_layout_id,
+                  Frame_Info frame_info, Arena *arena, char *code_buffer,
+                  i64 start_char_offset)
 {
     ProfileScope(app, "[Fleury] Render Calc Code");
     
@@ -2329,38 +2338,30 @@ Fleury4RenderCalcCode(Application_Links *app, Buffer_ID buffer,
             
             // NOTE(rjf): Draw result, if there's one.
             {
-                char result_buffer[256];
-                String_Const_u8 result_string =
-                {
-                    (u8 *)result_buffer,
-                };
+                String_Const_u8 result_string = {0};
                 
                 switch(result.value.type)
                 {
                     case CALC_TYPE_error:
                     {
-                        if(expr == 0 || !result.value.as_error)
+                        if(expr == 0 || !result.value.as_error.size)
                         {
-                            result_string.size = (u64)snprintf(result_buffer, sizeof(result_buffer),
-                                                               "(error: Parse failure.)");
+                            result_string = push_stringf(arena, "(error: Parse failure.)");
                         }
                         else
                         {
-                            result_string.size = (u64)snprintf(result_buffer, sizeof(result_buffer),
-                                                               "(error: %s)", result.value.as_error);
+                            result_string = push_stringf(arena, "(error: %.*s)", string_expand(result.value.as_error));
                         }
                         break;
                     }
                     case CALC_TYPE_number:
                     {
-                        result_string.size = (u64)snprintf(result_buffer, sizeof(result_buffer),
-                                                           "= %f", result.value.as_f64);
+                        result_string = push_stringf(arena, "= %f", result.value.as_f64);
                         break;
                     }
                     case CALC_TYPE_string:
                     {
-                        result_string.size = (u64)snprintf(result_buffer, sizeof(result_buffer),
-                                                           "= %.*s", result.value.string_length, result.value.as_string);
+                        result_string = push_stringf(arena, "= %.*s", string_expand(result.value.as_string));
                         break;
                     }
                     default: break;
@@ -2419,27 +2420,25 @@ Fleury4RenderCalcCode(Application_Links *app, Buffer_ID buffer,
 }
 
 static void
-Fleury4RenderCalcBuffer(Application_Links *app, Buffer_ID buffer, View_ID view,
-                        Text_Layout_ID text_layout_id, Frame_Info frame_info)
+F4_RenderCalcBuffer(Application_Links *app, Buffer_ID buffer, View_ID view,
+                    Text_Layout_ID text_layout_id, Frame_Info frame_info)
 {
-    static char arena_buffer[64*1024*1024];
-    MemoryArena arena = MemoryArenaInit(arena_buffer, sizeof(arena_buffer));
+    Arena arena = make_arena(get_base_allocator_system());
     Range_i64 visible_range = text_layout_get_visible_range(app, text_layout_id);
-    char *code_buffer = (char *)MemoryArenaAllocate(&arena, (u32)(visible_range.end - visible_range.start) + 1);
+    char *code_buffer = push_array(&arena, char, (u32)(visible_range.end - visible_range.start) + 1);
     MemorySet(code_buffer, 0, (u32)(visible_range.end - visible_range.start) + 1);
     buffer_read_range(app, buffer, visible_range, (u8 *)code_buffer);
-    Fleury4RenderCalcCode(app, buffer, view, text_layout_id, frame_info, &arena,
-                          code_buffer, visible_range.start);
+    F4_RenderCalcCode(app, buffer, view, text_layout_id, frame_info, &arena,
+                      code_buffer, visible_range.start);
 }
 
 static void
-Fleury4RenderCalcComments(Application_Links *app, Buffer_ID buffer, View_ID view,
-                          Text_Layout_ID text_layout_id, Frame_Info frame_info)
+F4_RenderCalcComments(Application_Links *app, Buffer_ID buffer, View_ID view,
+                      Text_Layout_ID text_layout_id, Frame_Info frame_info)
 {
     ProfileScope(app, "[Fleury] Calc Comments");
     
-    static char arena_buffer[64*1024*1024];
-    MemoryArena arena = MemoryArenaInit(arena_buffer, sizeof(arena_buffer));
+    Arena arena = make_arena(get_base_allocator_system());
     
     Scratch_Block scratch(app);
     Token_Array token_array = get_token_array_from_buffer(app, buffer);
@@ -2475,7 +2474,7 @@ Fleury4RenderCalcComments(Application_Links *app, Buffer_ID buffer, View_ID view
                 {
                     token_buffer_size = 4;
                 }
-                u8 *token_buffer = (u8 *)MemoryArenaAllocate(&arena, token_buffer_size+1);
+                u8 *token_buffer = push_array(&arena, u8, token_buffer_size+1);
                 buffer_read_range(app, buffer, token_range, token_buffer);
                 token_buffer[token_buffer_size] = 0;
                 
@@ -2496,8 +2495,8 @@ Fleury4RenderCalcComments(Application_Links *app, Buffer_ID buffer, View_ID view
                     
                     char *at = (char *)token_buffer + 3;
                     
-                    Fleury4RenderCalcCode(app, buffer, view, text_layout_id, frame_info,
-                                          &arena, at, token_range.start + 3);
+                    F4_RenderCalcCode(app, buffer, view, text_layout_id, frame_info,
+                                      &arena, at, token_range.start + 3);
                 }
                 
             }

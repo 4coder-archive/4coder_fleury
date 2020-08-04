@@ -1,6 +1,6 @@
 
-typedef struct MemoryArena MemoryArena;
-struct MemoryArena
+typedef struct _MemoryArena _MemoryArena;
+struct _MemoryArena
 {
     void *buffer;
     u32 buffer_size;
@@ -25,12 +25,14 @@ static struct
 }
 global_tooltips[32] = {0};
 static int global_tooltip_count = 0;
-static MemoryArena global_frame_arena = {0};
+static _MemoryArena _global_frame_arena = {0};
+static Arena global_frame_arena;
 
-static MemoryArena
-MemoryArenaInit(void *buffer, u32 buffer_size)
+#if 0
+static _MemoryArena
+_MemoryArenaInit(void *buffer, u32 buffer_size)
 {
-    MemoryArena arena = {0};
+    _MemoryArena arena = {0};
     arena.buffer = buffer;
     arena.buffer_size = buffer_size;
     arena.bytes_left = arena.buffer_size;
@@ -38,7 +40,7 @@ MemoryArenaInit(void *buffer, u32 buffer_size)
 }
 
 static void *
-MemoryArenaAllocate(MemoryArena *arena, u32 size)
+_MemoryArenaAllocate(MemoryArena *arena, u32 size)
 {
     void *memory = 0;
     if(arena->bytes_left >= size)
@@ -74,6 +76,15 @@ MemoryArenaClear(MemoryArena *arena)
 {
     arena->bytes_left = arena->buffer_size;
     arena->alloc_position = 0;
+}
+#endif
+
+static String_Const_u8
+StringStripBorderCharacters(String_Const_u8 string)
+{
+    string.str += 1;
+    string.size -= 2;
+    return string;
 }
 
 static f32
@@ -289,7 +300,7 @@ CStringCRC32(char *string)
 }
 
 static Code_Index_Note *
-Fleury4LookUpStringInCodeIndex(Application_Links *app, String_Const_u8 string)
+F4_LookUpStringInCodeIndex(Application_Links *app, String_Const_u8 string)
 {
     Code_Index_Note *note = 0;
     
@@ -318,17 +329,17 @@ Fleury4LookUpStringInCodeIndex(Application_Links *app, String_Const_u8 string)
 }
 
 static Code_Index_Note *
-Fleury4LookUpTokenInCodeIndex(Application_Links *app, Buffer_ID buffer, Token token)
+F4_LookUpTokenInCodeIndex(Application_Links *app, Buffer_ID buffer, Token token)
 {
     Code_Index_Note *note = 0;
     Scratch_Block scratch(app);
     String_Const_u8 string = push_buffer_range(app, scratch, buffer, Ii64(token.pos, token.pos + token.size));
-    note = Fleury4LookUpStringInCodeIndex(app, string);
+    note = F4_LookUpStringInCodeIndex(app, string);
     return note;
 }
 
 static ARGB_Color
-Fleury4GetCTokenColor(Token token)
+F4_GetCTokenColor(Token token)
 {
     ARGB_Color color = ARGBFromID(defcolor_text_default);
     
@@ -403,7 +414,7 @@ Fleury4GetCTokenColor(Token token)
 }
 
 static void
-Fleury4DrawCTokenColors(Application_Links *app, Text_Layout_ID text_layout_id, Token_Array *array)
+F4_DrawCTokenColors(Application_Links *app, Text_Layout_ID text_layout_id, Token_Array *array)
 {
     Range_i64 visible_range = text_layout_get_visible_range(app, text_layout_id);
     i64 first_index = token_index_from_pos(array, visible_range.first);
@@ -416,7 +427,7 @@ Fleury4DrawCTokenColors(Application_Links *app, Text_Layout_ID text_layout_id, T
         {
             break;
         }
-        ARGB_Color argb = Fleury4GetCTokenColor(*token);
+        ARGB_Color argb = F4_GetCTokenColor(*token);
         
         if(token->kind == TokenBaseKind_Identifier && token_it_inc_all(&it))
         {
@@ -444,7 +455,7 @@ Fleury4DrawCTokenColors(Application_Links *app, Text_Layout_ID text_layout_id, T
                     // NOTE(rjf): Look up token.
                     {
                         ProfileScope(app, "[Fleury] Code Index Token Look-Up");
-                        Code_Index_Note *note = Fleury4LookUpTokenInCodeIndex(app, buffer, *token);
+                        Code_Index_Note *note = F4_LookUpTokenInCodeIndex(app, buffer, *token);
                     }
                     
                     if(note && note->note_kind == CodeIndexNote_Type)
@@ -465,7 +476,7 @@ Fleury4DrawCTokenColors(Application_Links *app, Text_Layout_ID text_layout_id, T
 }
 
 static void
-Fleury4DrawTooltipRect(Application_Links *app, Rect_f32 rect)
+F4_DrawTooltipRect(Application_Links *app, Rect_f32 rect)
 {
     ARGB_Color background_color = fcolor_resolve(fcolor_id(defcolor_back));
     ARGB_Color border_color = fcolor_resolve(fcolor_id(defcolor_margin_active));
@@ -481,8 +492,8 @@ Fleury4DrawTooltipRect(Application_Links *app, Rect_f32 rect)
 }
 
 static void
-Fleury4RenderRangeHighlight(Application_Links *app, View_ID view_id, Text_Layout_ID text_layout_id,
-                            Range_i64 range)
+F4_RenderRangeHighlight(Application_Links *app, View_ID view_id, Text_Layout_ID text_layout_id,
+                        Range_i64 range)
 {
     Rect_f32 range_start_rect = text_layout_character_on_screen(app, text_layout_id, range.start);
     Rect_f32 range_end_rect = text_layout_character_on_screen(app, text_layout_id, range.end-1);
@@ -507,18 +518,13 @@ Fleury4RenderRangeHighlight(Application_Links *app, View_ID view_id, Text_Layout
 }
 
 static void
-Fleury4PushTooltip(String_Const_u8 string, ARGB_Color color)
+F4_PushTooltip(String_Const_u8 string, ARGB_Color color)
 {
     if(global_tooltip_count < ArrayCount(global_tooltips))
     {
-        String_Const_u8 string_copy =
-        {
-            (u8 *)MemoryArenaAllocate(&global_frame_arena, (u32)string.size),
-        };
-        MemoryCopy(string_copy.data, string.data, string.size);
-        string_copy.size = string.size;
-        
+        String_Const_u8 string_copy = push_string_copy(&global_frame_arena, string);
         global_tooltips[global_tooltip_count].color = color;
-        global_tooltips[global_tooltip_count++].string = string_copy;
+        global_tooltips[global_tooltip_count].string = string_copy;
+        global_tooltip_count += 1;
     }
 }

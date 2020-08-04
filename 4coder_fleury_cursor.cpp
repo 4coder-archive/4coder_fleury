@@ -6,9 +6,9 @@ static i64 global_cursor_positions[16] = {0};
 static i64 global_mark_positions[16] = {0};
 
 static void
-Fleury4RenderCursorSymbolThingy(Application_Links *app, Rect_f32 rect,
-                                f32 roundness, f32 thickness,
-                                ARGB_Color color, b32 open)
+F4_RenderCursorSymbolThingy(Application_Links *app, Rect_f32 rect,
+                            f32 roundness, f32 thickness,
+                            ARGB_Color color, b32 open)
 {
     Rect_f32 top_bar_rect_thing;
     Rect_f32 side_bar_rect_thing;
@@ -106,9 +106,9 @@ DoTheCursorInterpolation(Application_Links *app, Frame_Info frame_info,
 }
 
 static void
-Fleury4RenderCursor(Application_Links *app, View_ID view_id, b32 is_active_view,
-                    Buffer_ID buffer, Text_Layout_ID text_layout_id,
-                    f32 roundness, f32 outline_thickness, Frame_Info frame_info)
+F4_RenderCursor(Application_Links *app, View_ID view_id, b32 is_active_view,
+                Buffer_ID buffer, Text_Layout_ID text_layout_id,
+                f32 roundness, f32 outline_thickness, Frame_Info frame_info)
 {
     Rect_f32 view_rect = view_get_screen_rect(app, view_id);
     Rect_f32 clip = draw_set_clip(app, view_rect);
@@ -183,7 +183,7 @@ Fleury4RenderCursor(Application_Links *app, View_ID view_id, b32 is_active_view,
                 
                 // NOTE(rjf): Draw main cursor.
                 {
-                    Fleury4RenderCursorSymbolThingy(app, global_cursor_rect, roundness, 4.f, fcolor_resolve(cursor_color), cursor_open);
+                    F4_RenderCursorSymbolThingy(app, global_cursor_rect, roundness, 4.f, fcolor_resolve(cursor_color), cursor_open);
                 }
                 
                 // NOTE(rjf): Draw cursor glow (because why the hell not).
@@ -197,8 +197,8 @@ Fleury4RenderCursor(Application_Links *app, View_ID view_id, b32 is_active_view,
                         glow_rect.y0 -= glow;
                         glow_rect.x1 += glow;
                         glow_rect.y1 += glow;
-                        Fleury4RenderCursorSymbolThingy(app, glow_rect, roundness + glow*0.7f, 2.f,
-                                                        fcolor_resolve(fcolor_change_alpha(cursor_color, alpha)), cursor_open);
+                        F4_RenderCursorSymbolThingy(app, glow_rect, roundness + glow*0.7f, 2.f,
+                                                    fcolor_resolve(fcolor_change_alpha(cursor_color, alpha)), cursor_open);
                     }
                     else
                     {
@@ -210,8 +210,8 @@ Fleury4RenderCursor(Application_Links *app, View_ID view_id, b32 is_active_view,
             
             // paint_text_color_pos(app, text_layout_id, cursor_pos,
             // fcolor_id(defcolor_at_cursor));
-            Fleury4RenderCursorSymbolThingy(app, global_mark_rect, roundness, 2.f,
-                                            fcolor_resolve(fcolor_change_alpha(cursor_color, 0.5f)), !cursor_open);
+            F4_RenderCursorSymbolThingy(app, global_mark_rect, roundness, 2.f,
+                                        fcolor_resolve(fcolor_change_alpha(cursor_color, 0.5f)), !cursor_open);
         }
     }
     
@@ -219,7 +219,7 @@ Fleury4RenderCursor(Application_Links *app, View_ID view_id, b32 is_active_view,
 }
 
 static void
-Fleury4HighlightCursorMarkRange(Application_Links *app, View_ID view_id)
+F4_HighlightCursorMarkRange(Application_Links *app, View_ID view_id)
 {
     Rect_f32 view_rect = view_get_screen_rect(app, view_id);
     Rect_f32 clip = draw_set_clip(app, view_rect);
@@ -247,8 +247,8 @@ Fleury4HighlightCursorMarkRange(Application_Links *app, View_ID view_id)
 //~ NOTE(rjf): Mark Annotation
 
 static void
-Fleury4RenderMarkAnnotation(Application_Links *app, Buffer_ID buffer, Text_Layout_ID text_layout_id,
-                            View_ID view_id, b32 is_active_view)
+F4_RenderMarkAnnotation(Application_Links *app, Buffer_ID buffer, Text_Layout_ID text_layout_id,
+                        View_ID view_id, b32 is_active_view)
 {
     i64 pos = view_get_mark_pos(app, view_id);
     
