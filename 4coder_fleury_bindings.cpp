@@ -59,7 +59,6 @@ F4_SetBindings(Mapping *mapping)
         Bind(open_panel_vsplit, KeyCode_P, KeyCode_Control);
         Bind(open_panel_hsplit, KeyCode_Minus, KeyCode_Control);
         Bind(close_panel, KeyCode_P, KeyCode_Control, KeyCode_Shift);
-        Bind(fleury_toggle_colors, KeyCode_Tick, KeyCode_Control);
         Bind(fleury_place_cursor, KeyCode_Tick, KeyCode_Alt);
         Bind(fleury_toggle_power_mode, KeyCode_P, KeyCode_Alt);
         Bind(jump_to_definition, KeyCode_J, KeyCode_Control);

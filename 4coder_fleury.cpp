@@ -10,7 +10,6 @@
 #include "4coder_fleury_power_mode.cpp"
 #include "4coder_fleury_cursor.cpp"
 #include "4coder_fleury_code_peek.cpp"
-#include "4coder_fleury_theme.cpp"
 #include "4coder_fleury_bindings.cpp"
 #include "4coder_fleury_brace.cpp"
 #include "4coder_fleury_divider_comments.cpp"
@@ -378,8 +377,6 @@ custom_layer_init(Application_Links *app)
         buffer_set_setting(app, calc_buffer, BufferSetting_Unimportant, true);
         // (void)calc_buffer;
     }
-    
-    F4_DarkMode(app);
 }
 
 
