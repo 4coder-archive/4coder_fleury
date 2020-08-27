@@ -1575,22 +1575,32 @@ static void
 F4_Render(Application_Links *app, Frame_Info frame_info, View_ID view_id)
 {
     ProfileScope(app, "[Fleury] Render");
+    Scratch_Block scratch(app);
+    
     View_ID active_view = get_active_view(app, Access_Always);
     b32 is_active_view = (active_view == view_id);
     
     Rect_f32 view_rect = view_get_screen_rect(app, view_id);
     Rect_f32 region = rect_inner(view_rect, 1.f);
     
+    Buffer_ID buffer = view_get_buffer(app, view_id, Access_Always);
+    String_Const_u8 buffer_name = push_buffer_base_name(app, scratch, buffer);
+    
     // NOTE(rjf): Draw background.
     {
         ARGB_Color color = fcolor_resolve(fcolor_id(defcolor_back));
+        
+        if(string_match(buffer_name, string_u8_litexpr("*compilation*")))
+        {
+            color = color_blend(color, 0.5f, 0xff000000);
+        }
+        
         draw_rectangle(app, region, 0.f, color);
         draw_margin(app, view_rect, region, color);
     }
     
     Rect_f32 prev_clip = draw_set_clip(app, region);
     
-    Buffer_ID buffer = view_get_buffer(app, view_id, Access_Always);
     Face_ID face_id = get_face_id(app, buffer);
     Face_Metrics face_metrics = get_face_metrics(app, face_id);
     f32 line_height = face_metrics.line_height;
@@ -1671,6 +1681,12 @@ F4_Render(Application_Links *app, Frame_Info frame_info, View_ID view_id)
     
     // NOTE(allen): draw the buffer
     F4_RenderBuffer(app, view_id, face_id, buffer, text_layout_id, region, frame_info);
+    
+    // NOTE(rjf): Draw inactive rectangle
+    if(is_active_view == 0)
+    {
+        draw_rectangle(app, view_rect, 0.f, 0x44000000);
+    }
     
     text_layout_free(app, text_layout_id);
     draw_set_clip(app, prev_clip);

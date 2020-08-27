@@ -431,8 +431,8 @@ F4_DrawCTokenColors(Application_Links *app, Text_Layout_ID text_layout_id, Token
         
         if(token->kind == TokenBaseKind_Identifier && token_it_inc_all(&it))
         {
-            Token *second_token = token_it_read(&it);
-            token_it_dec_all(&it);
+            Token *second_token = token_it_inc_non_whitespace(&it);
+            token_it_dec_non_whitespace(&it);
             
             // NOTE(rjf): Function or macro?
             if(second_token && second_token->kind == TokenBaseKind_ParentheticalOpen &&
