@@ -167,7 +167,7 @@ static float global_data_3[] =
 
 
 /*c
-plot_function_samples(100)
+ plot_function_samples(100)
 
 sin2_time = sin(time()/2)^2 + 0.2
 
@@ -352,6 +352,19 @@ CUSTOM_DOC("Toggles battery saving mode.")
 
 //~ NOTE(rjf): Custom layer initialization
 
+DELTA_RULE_SIG(F4_DeltaRule)
+{
+    Vec2_f32 *velocity = (Vec2_f32*)data;
+    if (velocity->x == 0.f){
+        velocity->x = 1.f;
+        velocity->y = 1.f;
+    }
+    Smooth_Step step_x = smooth_camera_step(pending.x, velocity->x, 80.f, 1.f/4.f);
+    Smooth_Step step_y = smooth_camera_step(pending.y, velocity->y, 80.f, 1.f/4.f);
+    *velocity = V2f32(step_x.v, step_y.v);
+    return(V2f32(step_x.p, step_y.p));
+}
+
 void
 custom_layer_init(Application_Links *app)
 {
@@ -366,6 +379,8 @@ custom_layer_init(Application_Links *app)
     set_custom_hook(app, HookID_BeginBuffer,             F4_BeginBuffer);
     set_custom_hook(app, HookID_Layout,                  F4_Layout);
     set_custom_hook(app, HookID_WholeScreenRenderCaller, F4_WholeScreenRender);
+    set_custom_hook(app, HookID_DeltaRule,               F4_DeltaRule);
+    set_custom_hook_memory_size(app, HookID_DeltaRule, delta_ctx_size(sizeof(Vec2_f32)));
     mapping_init(tctx, &framework_mapping);
     F4_SetBindings(&framework_mapping);
     
@@ -1591,7 +1606,6 @@ F4_Render(Application_Links *app, Frame_Info frame_info, View_ID view_id)
     }
     
     Buffer_Scroll scroll = view_get_buffer_scroll(app, view_id);
-    
     Buffer_Point_Delta_Result delta = delta_apply(app, view_id, frame_info.animation_dt, scroll);
     
     if(!block_match_struct(&scroll.position, &delta.point))
