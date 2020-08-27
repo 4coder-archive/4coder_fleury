@@ -429,9 +429,9 @@ F4_DrawCTokenColors(Application_Links *app, Text_Layout_ID text_layout_id, Token
         }
         ARGB_Color argb = F4_GetCTokenColor(*token);
         
-        if(token->kind == TokenBaseKind_Identifier && token_it_inc_all(&it))
+        if(token->kind == TokenBaseKind_Identifier && token_it_inc_non_whitespace(&it))
         {
-            Token *second_token = token_it_inc_non_whitespace(&it);
+            Token *second_token = token_it_read(&it);
             token_it_dec_non_whitespace(&it);
             
             // NOTE(rjf): Function or macro?
