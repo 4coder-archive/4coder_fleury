@@ -222,8 +222,23 @@ F4_RenderBraceLines(Application_Links *app, Buffer_ID buffer, View_ID view,
     
     Scratch_Block scratch(app);
     Range_i64_Array ranges = get_enclosure_ranges(app, scratch, buffer, pos, RangeHighlightKind_CharacterHighlight);
+    
+    Rect_f32 line_number_rect = {};
+    if(global_config.show_line_number_margins)
+    {
+        Rect_f32 rect = view_get_screen_rect(app, view);
+        
+        Face_Metrics face_metrics = get_face_metrics(app, face_id);
+        f32 digit_advance = face_metrics.decimal_digit_advance;
+        
+        Rect_f32_Pair pair = layout_line_number_margin(app, buffer, rect, digit_advance);
+        line_number_rect = pair.min;
+        line_number_rect.x1 += 4;
+    }
+    
     float x_position = view_get_screen_rect(app, view).x0 + 4 -
-        view_get_buffer_scroll(app, view).position.pixel_shift.x;
+        view_get_buffer_scroll(app, view).position.pixel_shift.x +
+        (line_number_rect.x1 - line_number_rect.x0);
     
     for (i32 i = ranges.count - 1; i >= 0; i -= 1)
     {
