@@ -172,7 +172,7 @@ static float global_data_3[] =
 sin2_time = sin(time()/2)^2 + 0.2
 
 plot_title('Plotting Data')
- dat = [ [ 0 1 2 3 4 5 6 7 8 9 ], [ 0 1 2 3 4 5 6 7 8 9 ] ]
+ dat = [ [ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, ], [ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, ], ]
 plot_xaxis('x', 0, 10*sin2_time)
 plot_yaxis('y', 0, 10)
 plot(dat)
