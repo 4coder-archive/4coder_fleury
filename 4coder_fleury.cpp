@@ -214,19 +214,19 @@ plot(1/(x), x^2, -sin(x), cos(4*x))
 /*c
 t = 2 * abs((time()/8) % 1 - 0.5)
 
-plot_xaxis('t', -0.25, 1.25)
-plot_yaxis('v', -0.25, 1.25)
+ plot_xaxis('t', -0.25, 1.25)
+ plot_yaxis('v', -0.25, 1.25)
 
   plot_title('Linear')
-transition = [ [t], [t] ]
+transition = [ [t,], [t,], ]
 plot(x, transition, t)
 
  plot_title('Cubic')
- transition = [ [t], [-2*t^3+3*t^2] ]
+ transition = [ [t,], [-2*t^3+3*t^2,], ]
  plot(-2*x^3+3*x^2, transition, -2*t^3+3*t^2)
 
  plot_title('Exponential')
- transition = [ [t], [ 1-1 * 0.5^(10*t) ] ]
+ transition = [ [t,], [ 1-1 * 0.5^(10*t), ], ]
  plot(1-1 * 0.5^(10*x), transition, 1-1 * 0.5^(10*t))
 */
 
