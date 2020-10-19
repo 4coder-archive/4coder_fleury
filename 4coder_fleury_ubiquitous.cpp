@@ -1,13 +1,4 @@
 
-typedef struct _MemoryArena _MemoryArena;
-struct _MemoryArena
-{
-    void *buffer;
-    u32 buffer_size;
-    u32 alloc_position;
-    u32 bytes_left;
-};
-
 static Face_ID global_styled_title_face = 0;
 static Face_ID global_styled_label_face = 0;
 static Face_ID global_small_code_face = 0;
@@ -25,59 +16,7 @@ static struct
 }
 global_tooltips[32] = {0};
 static int global_tooltip_count = 0;
-static _MemoryArena _global_frame_arena = {0};
 static Arena global_frame_arena;
-
-#if 0
-static _MemoryArena
-_MemoryArenaInit(void *buffer, u32 buffer_size)
-{
-    _MemoryArena arena = {0};
-    arena.buffer = buffer;
-    arena.buffer_size = buffer_size;
-    arena.bytes_left = arena.buffer_size;
-    return arena;
-}
-
-static void *
-_MemoryArenaAllocate(MemoryArena *arena, u32 size)
-{
-    void *memory = 0;
-    if(arena->bytes_left >= size)
-    {
-        memory = (char *)arena->buffer + arena->alloc_position;
-        arena->alloc_position += size;
-        arena->bytes_left -= size;
-        u32 bytes_to_align = arena->alloc_position % 16;
-        arena->alloc_position += bytes_to_align;
-        arena->bytes_left -= bytes_to_align;
-    }
-    return memory;
-}
-
-static char *
-MakeCStringOnMemoryArena(MemoryArena *arena, char *format, ...)
-{
-    char *result = 0;
-    va_list args;
-    va_start(args, format);
-    int required_bytes = vsnprintf(0, 0, format, args)+1;
-    va_end(args);
-    result = (char *)MemoryArenaAllocate(arena, required_bytes);
-    va_start(args, format);
-    vsnprintf(result, required_bytes, format, args);
-    va_end(args);
-    result[required_bytes-1] = 0;
-    return result;
-}
-
-static void
-MemoryArenaClear(MemoryArena *arena)
-{
-    arena->bytes_left = arena->buffer_size;
-    arena->alloc_position = 0;
-}
-#endif
 
 static String_Const_u8
 StringStripBorderCharacters(String_Const_u8 string)
