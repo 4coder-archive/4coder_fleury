@@ -382,7 +382,14 @@ custom_layer_init(Application_Links *app)
     set_custom_hook(app, HookID_DeltaRule,               F4_DeltaRule);
     set_custom_hook_memory_size(app, HookID_DeltaRule, delta_ctx_size(sizeof(Vec2_f32)));
     mapping_init(tctx, &framework_mapping);
-    F4_SetBindings(&framework_mapping);
+    F4_SetDefaultBindings(&framework_mapping);
+    
+    String_Const_u8 bindings_file = string_u8_litexpr("bindings.4coder");
+    F4_SetAbsolutelyNecessaryBindings(&framework_mapping);
+    if(!F4_LoadBindingsFromFile(app, &framework_mapping, bindings_file))
+    {
+        F4_SetDefaultBindings(&framework_mapping);
+    }
     
     // NOTE(rjf): Open calc buffer.
     {

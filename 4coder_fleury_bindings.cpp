@@ -1,8 +1,157 @@
 
 //~ NOTE(rjf): Bindings
 
+static Key_Code
+F4_MapStringToKeyCode(String_Const_u8 key_string)
+{
+    Key_Code result = 0;
+    for(int i = 1; i < KeyCode_COUNT; i += 1)
+    {
+        String_Const_u8 str = {};
+        str.data = key_code_name[i];
+        str.size = strlen(key_code_name[i]);
+        if(string_match(str, key_string))
+        {
+            result = i;
+            break;
+        }
+    }
+    return result;
+}
+
+static b32
+F4_LoadBindingsFromFile(Application_Links *app, Mapping *mapping, String_Const_u8 filename)
+{
+    b32 result = 0;
+    
+    Scratch_Block scratch(app);
+    MappingScope();
+    SelectMapping(mapping);
+    
+    char *filename_cstr = push_array(scratch, char, filename.size+1);
+    MemoryCopy(filename_cstr, filename.str, filename.size);
+    filename_cstr[filename.size] = 0;
+    FILE *file = open_file_try_current_path_then_binary_path(app, filename_cstr);
+    if(file != 0)
+    {
+        Data data = dump_file_handle(scratch, file);
+        Config *parsed = config_from_text(app, scratch, filename, SCu8(data));
+        
+        if(parsed)
+        {
+            result = 1;
+            
+            struct
+            {
+                String_Const_u8 name;
+                Managed_ID id;
+            }
+            maps[] = 
+            {
+                { string_u8_litexpr("keys_global"), mapid_global },
+                { string_u8_litexpr("keys_file"),   mapid_file   },
+                { string_u8_litexpr("keys_code"),   mapid_code   },
+            };
+            
+            for(int map_idx = 0; map_idx < ArrayCount(maps); map_idx += 1)
+            {
+                SelectMap(maps[map_idx].id);
+                
+                Config_Compound *compound = 0;
+                if(config_compound_var(parsed, maps[map_idx].name, 0, &compound))
+                {
+                    Config_Get_Result_List list = typed_compound_array_reference_list(scratch, parsed, compound);
+                    for(Config_Get_Result_Node *node = list.first; node != 0; node = node->next)
+                    {
+                        Config_Compound *src = node->result.compound;
+                        String_Const_u8 cmd_string = {0};
+                        String_Const_u8 key_string = {0};
+                        String_Const_u8 mod_string[4] = {0};
+                        
+                        if(!config_compound_string_member(parsed, src, "cmd", 0, &cmd_string))
+                        {
+                            config_add_error(scratch, parsed, node->result.pos, "Command string is required in binding");
+                            goto finish_map;
+                        }
+                        
+                        if(!config_compound_string_member(parsed, src, "key", 1, &key_string))
+                        {
+                            config_add_error(scratch, parsed, node->result.pos, "Key string is required in binding");
+                            goto finish_map;
+                        }
+                        
+                        for(int mod_idx = 0; mod_idx < ArrayCount(mod_string); mod_idx += 1)
+                        {
+                            String_Const_u8 str = push_stringf(scratch, "mod_%i", mod_idx);
+                            if(config_compound_string_member(parsed, src, str, 2 + mod_idx, &mod_string[mod_idx]))
+                            {
+                                // NOTE(rjf): No-Op
+                            }
+                        }
+                        
+                        // NOTE(rjf): Map read in successfully.
+                        {
+                            
+                            // NOTE(rjf): Find command.
+                            Command_Metadata *command = 0;
+                            {
+                                for(int i = 0; i < ArrayCount(fcoder_metacmd_table); i += 1)
+                                {
+                                    Command_Metadata *candidate = fcoder_metacmd_table + i;
+                                    String_Const_u8 str = { candidate->name, (u64)candidate->name_len };
+                                    if(string_match(str, cmd_string))
+                                    {
+                                        command = candidate;
+                                        break;
+                                    }
+                                }
+                            }
+                            
+                            // NOTE(rjf): Find keycode.
+                            Key_Code keycode = F4_MapStringToKeyCode(key_string);
+                            
+                            // NOTE(rjf): Find mods.
+                            int mod_count = 0;
+                            Key_Code mods[ArrayCount(mod_string)] = {0};
+                            for(int i = 0; i < ArrayCount(mod_string); i += 1)
+                            {
+                                if(mod_string[i].str)
+                                {
+                                    mods[mod_count] = F4_MapStringToKeyCode(mod_string[i]);
+                                    mod_count += 1;
+                                }
+                            }
+                            
+                            if(keycode && command)
+                            {
+                                Input_Modifier_Set mods_set = { mods, mod_count, };
+                                map_set_binding(mapping, map, command->proc, InputEventKind_KeyStroke, keycode, &mods_set);
+                            }
+                            else
+                            {
+                                config_add_error(scratch, parsed, node->result.pos, keycode ? "Invalid command" : command ? "Invalid key": "Invalid command and key");
+                            }
+                            
+                        }
+                        
+                        finish_map:;
+                    }
+                }
+                
+                if(parsed && parsed->errors.first)
+                {
+                    String_Const_u8 error_text = config_stringize_errors(app, scratch, parsed);
+                    print_message(app, error_text);
+                }
+            }
+        }
+    }
+    
+    return result;
+}
+
 static void
-F4_SetBindings(Mapping *mapping)
+F4_SetAbsolutelyNecessaryBindings(Mapping *mapping)
 {
     MappingScope();
     SelectMapping(mapping);
@@ -10,6 +159,29 @@ F4_SetBindings(Mapping *mapping)
     SelectMap(mapid_global);
     BindCore(fleury_startup, CoreCode_Startup);
     BindCore(default_try_exit, CoreCode_TryExit);
+    Bind(exit_4coder,          KeyCode_F4, KeyCode_Alt);
+    BindMouseWheel(mouse_wheel_scroll);
+    BindMouseWheel(mouse_wheel_change_face_size, KeyCode_Control);
+    
+    SelectMap(mapid_file);
+    ParentMap(mapid_global);
+    BindTextInput(fleury_write_text_input);
+    BindMouse(click_set_cursor_and_mark, MouseCode_Left);
+    BindMouseRelease(click_set_cursor, MouseCode_Left);
+    BindCore(click_set_cursor_and_mark, CoreCode_ClickActivateView);
+    BindMouseMove(click_set_cursor_if_lbutton);
+    
+    SelectMap(mapid_code);
+    ParentMap(mapid_file);
+    BindTextInput(fleury_write_text_and_auto_indent);
+}
+
+static void
+F4_SetDefaultBindings(Mapping *mapping)
+{
+    MappingScope();
+    SelectMapping(mapping);
+    SelectMap(mapid_global);
     Bind(keyboard_macro_start_recording , KeyCode_U, KeyCode_Control);
     Bind(keyboard_macro_finish_recording, KeyCode_U, KeyCode_Control, KeyCode_Shift);
     Bind(keyboard_macro_replay,           KeyCode_U, KeyCode_Alt);
@@ -50,9 +222,6 @@ F4_SetBindings(Mapping *mapping)
     Bind(project_fkey_command, KeyCode_F14);
     Bind(project_fkey_command, KeyCode_F15);
     Bind(project_fkey_command, KeyCode_F16);
-    Bind(exit_4coder,          KeyCode_F4, KeyCode_Alt);
-    BindMouseWheel(mouse_wheel_scroll);
-    BindMouseWheel(mouse_wheel_change_face_size, KeyCode_Control);
     
     // NOTE(rjf): Custom bindings.
     {
@@ -67,11 +236,6 @@ F4_SetBindings(Mapping *mapping)
     
     SelectMap(mapid_file);
     ParentMap(mapid_global);
-    BindTextInput(fleury_write_text_input);
-    BindMouse(click_set_cursor_and_mark, MouseCode_Left);
-    BindMouseRelease(click_set_cursor, MouseCode_Left);
-    BindCore(click_set_cursor_and_mark, CoreCode_ClickActivateView);
-    BindMouseMove(click_set_cursor_if_lbutton);
     Bind(delete_char,            KeyCode_Delete);
     Bind(backspace_char,         KeyCode_Backspace);
     Bind(move_up,                KeyCode_Up);
@@ -106,7 +270,7 @@ F4_SetBindings(Mapping *mapping)
     Bind(list_all_substring_locations_case_insensitive, KeyCode_F, KeyCode_Alt);
     Bind(goto_line,                   KeyCode_G, KeyCode_Control);
     Bind(list_all_locations_of_selection,  KeyCode_G, KeyCode_Control, KeyCode_Shift);
-    // Bind(snippet_lister,              KeyCode_J, KeyCode_Control);
+    Bind(snippet_lister,              KeyCode_J, KeyCode_Control);
     Bind(kill_buffer,                 KeyCode_K, KeyCode_Control, KeyCode_Shift);
     Bind(duplicate_line,              KeyCode_L, KeyCode_Control);
     Bind(cursor_mark_swap,            KeyCode_M, KeyCode_Control);
