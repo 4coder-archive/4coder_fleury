@@ -2423,12 +2423,12 @@ static void
 F4_RenderCalcBuffer(Application_Links *app, Buffer_ID buffer, View_ID view,
                     Text_Layout_ID text_layout_id, Frame_Info frame_info)
 {
-    Arena arena = make_arena(get_base_allocator_system());
+    Scratch_Block scratch(app);
     Range_i64 visible_range = text_layout_get_visible_range(app, text_layout_id);
-    char *code_buffer = push_array(&arena, char, (u32)(visible_range.end - visible_range.start) + 1);
+    char *code_buffer = push_array(scratch, char, (u32)(visible_range.end - visible_range.start) + 1);
     MemorySet(code_buffer, 0, (u32)(visible_range.end - visible_range.start) + 1);
     buffer_read_range(app, buffer, visible_range, (u8 *)code_buffer);
-    F4_RenderCalcCode(app, buffer, view, text_layout_id, frame_info, &arena,
+    F4_RenderCalcCode(app, buffer, view, text_layout_id, frame_info, scratch,
                       code_buffer, visible_range.start);
 }
 
@@ -2437,8 +2437,6 @@ F4_RenderCalcComments(Application_Links *app, Buffer_ID buffer, View_ID view,
                       Text_Layout_ID text_layout_id, Frame_Info frame_info)
 {
     ProfileScope(app, "[Fleury] Calc Comments");
-    
-    Arena arena = make_arena(get_base_allocator_system());
     
     Scratch_Block scratch(app);
     Token_Array token_array = get_token_array_from_buffer(app, buffer);
@@ -2474,7 +2472,7 @@ F4_RenderCalcComments(Application_Links *app, Buffer_ID buffer, View_ID view,
                 {
                     token_buffer_size = 4;
                 }
-                u8 *token_buffer = push_array(&arena, u8, token_buffer_size+1);
+                u8 *token_buffer = push_array(scratch, u8, token_buffer_size+1);
                 buffer_read_range(app, buffer, token_range, token_buffer);
                 token_buffer[token_buffer_size] = 0;
                 
@@ -2496,7 +2494,7 @@ F4_RenderCalcComments(Application_Links *app, Buffer_ID buffer, View_ID view,
                     char *at = (char *)token_buffer + 3;
                     
                     F4_RenderCalcCode(app, buffer, view, text_layout_id, frame_info,
-                                      &arena, at, token_range.start + 3);
+                                      scratch, at, token_range.start + 3);
                 }
                 
             }
