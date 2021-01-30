@@ -1,0 +1,47 @@
+
+function void
+F4_DrawTooltipRect(Application_Links *app, Rect_f32 rect)
+{
+    ARGB_Color background_color = fcolor_resolve(fcolor_id(defcolor_back));
+    ARGB_Color border_color = fcolor_resolve(fcolor_id(defcolor_margin_active));
+    
+    background_color &= 0x00ffffff;
+    background_color |= 0xd0000000;
+    
+    border_color &= 0x00ffffff;
+    border_color |= 0xd0000000;
+    
+    draw_rectangle(app, rect, 4.f, background_color);
+    draw_rectangle_outline(app, rect, 4.f, 3.f, border_color);
+}
+
+function void
+F4_RenderRangeHighlight(Application_Links *app, View_ID view_id, Text_Layout_ID text_layout_id,
+                        Range_i64 range, F4_RangeHighlightKind kind)
+{
+    Rect_f32 range_start_rect = text_layout_character_on_screen(app, text_layout_id, range.start);
+    Rect_f32 range_end_rect = text_layout_character_on_screen(app, text_layout_id, range.end-1);
+    Rect_f32 total_range_rect = {0};
+    total_range_rect.x0 = MinimumF32(range_start_rect.x0, range_end_rect.x0);
+    total_range_rect.y0 = MinimumF32(range_start_rect.y0, range_end_rect.y0);
+    total_range_rect.x1 = MaximumF32(range_start_rect.x1, range_end_rect.x1);
+    total_range_rect.y1 = MaximumF32(range_start_rect.y1, range_end_rect.y1);
+    if(kind == F4_RangeHighlightKind_Underline)
+    {
+        total_range_rect.y0 = total_range_rect.y1 - 1.f;
+        total_range_rect.y1 += 1.f;
+    }
+    draw_rectangle(app, total_range_rect, 4.f, fcolor_resolve(fcolor_id(fleury_color_token_highlight)));
+}
+
+function void
+F4_PushTooltip(String_Const_u8 string, ARGB_Color color)
+{
+    if(global_tooltip_count < ArrayCount(global_tooltips))
+    {
+        String_Const_u8 string_copy = push_string_copy(&global_frame_arena, string);
+        global_tooltips[global_tooltip_count].color = color;
+        global_tooltips[global_tooltip_count].string = string_copy;
+        global_tooltip_count += 1;
+    }
+}

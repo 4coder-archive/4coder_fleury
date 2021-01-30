@@ -1,71 +1,24 @@
-static ARGB_Color global_plot_color_cycle[] =
-{
-    0xff03d3fc,
-    0xff22b80b,
-    0xfff0bb0c,
-    0xfff0500c,
-};
 
-enum Plot2DMode
-{
-    PLOT2D_MODE_LINE,
-    PLOT2D_MODE_HISTOGRAM,
-};
-
-typedef struct Plot2DInfo Plot2DInfo;
-struct Plot2DInfo
-{
-    // NOTE(rjf): 4coder stuff.
-    Application_Links *app;
-    Face_ID title_face_id;
-    Face_ID label_face_id;
-    
-    // NOTE(rjf): Data generic to all plots.
-    Plot2DMode mode;
-    String_Const_u8 title;
-    String_Const_u8 x_axis;
-    String_Const_u8 y_axis;
-    Rect_f32 screen_rect;
-    
-    // NOTE(rjf): Line and point plot.
-    Rect_f32 plot_view;
-    
-    // NOTE(rjf): Histogram stuff.
-    int num_bins;
-    int *bins;
-    Range_f32 bin_data_range;
-    int bin_group_count;
-    
-    // NOTE(rjf): Used internally; zero initialize.
-    Rect_f32 last_clip;
-    int color_cycle_position;
-    int current_bin_group;
-};
-
-enum Plot2DStyleFlags
-{
-    PLOT2D_LINES  = (1<<0),
-    PLOT2D_POINTS = (1<<1),
-};
-
-static void
+ function void
 Plot2DBegin(Plot2DInfo *plot)
 {
+    Scratch_Block scratch(plot->app);
+    
     Rect_f32 rect = plot->screen_rect;
     Rect_f32 plot_view = plot->plot_view;
     
-    if(plot->title.data)
+    if(plot->title.str)
     {
         Face_Metrics metrics = get_face_metrics(plot->app, plot->title_face_id);
         draw_string(plot->app, plot->title_face_id, plot->title, V2f32(rect.x0, rect.y0 - metrics.line_height), fcolor_resolve(fcolor_id(defcolor_comment)));
     }
     
-    if(plot->x_axis.data)
+    if(plot->x_axis.str)
     {
         draw_string(plot->app, plot->label_face_id, plot->x_axis, V2f32(rect.x0, rect.y1), fcolor_resolve(fcolor_id(defcolor_comment)));
     }
     
-    if(plot->y_axis.data)
+    if(plot->y_axis.str)
     {
         draw_string_oriented(plot->app, plot->label_face_id, fcolor_resolve(fcolor_id(defcolor_comment)), plot->y_axis,
                              V2f32(rect.x0 - 10, rect.y0 + 5), 0, V2f32(0.f, 1.f));
@@ -77,7 +30,7 @@ Plot2DBegin(Plot2DInfo *plot)
     draw_rectangle(plot->app, rect, 4.f, fcolor_resolve(fcolor_id(defcolor_back)));
     
     // NOTE(rjf): Draw grid lines.
-    if(plot->mode != PLOT2D_MODE_HISTOGRAM)
+    if(plot->mode != Plot2DMode_Histogram)
     {
         Face_Metrics metrics = get_face_metrics(plot->app, plot->label_face_id);
         
@@ -120,12 +73,7 @@ Plot2DBegin(Plot2DInfo *plot)
                     float nearest_y_tick = (plot_view.y1 + plot_view.y0) / 2;
                     nearest_y_tick -= fmodf(nearest_y_tick, tick_increment_y);
                     
-                    char num[32] = {0};
-                    String_Const_u8 str =
-                    {
-                        num,
-                        (u64)snprintf(num, sizeof(num), "%.*f", tick_increment_y >= 1 ? 0 : 3, x),
-                    };
+                    String_Const_u8 str = push_stringf(scratch, "%.*f", tick_increment_y >= 1 ? 0 : 3, x);
                     draw_string(plot->app, plot->label_face_id, str,
                                 V2f32(line_rect.x0,
                                       rect.y0 + rect_height -
@@ -156,26 +104,18 @@ Plot2DBegin(Plot2DInfo *plot)
                     float nearest_x_tick = (plot_view.x1 + plot_view.x0) / 2;
                     nearest_x_tick -= fmodf(nearest_x_tick, tick_increment_x);
                     
-                    char num[32] = {0};
-                    String_Const_u8 str =
-                    {
-                        num,
-                        (u64)snprintf(num, sizeof(num), "%.*f", tick_increment_y >= 1 ? 0 : 3, y),
-                    };
+                    String_Const_u8 str = push_stringf(scratch, "%.*f", tick_increment_y >= 1 ? 0 : 3, y);
                     draw_string(plot->app, plot->label_face_id, str,
                                 V2f32(rect.x0 + rect_width * (nearest_x_tick - plot_view.x0) / (plot_view.x1 - plot_view.x0),
                                       line_rect.y0),
                                 grid_line_color);
                 }
-                
             }
         }
-        
     }
-    
 }
 
-static void
+function void
 Plot2DPoints(Plot2DInfo *plot, i32 style_flags,
              float *x_data, float *y_data, int data_count)
 {
@@ -187,15 +127,16 @@ Plot2DPoints(Plot2DInfo *plot, i32 style_flags,
     
     // NOTE(rjf): Draw function samples.
     {
+        Color_Array plot_cycle = finalize_color_array(fleury_color_plot_cycle);
         ARGB_Color function_color =
-            global_plot_color_cycle[(plot->color_cycle_position++) % ArrayCount(global_plot_color_cycle)];
+            plot_cycle.vals[(plot->color_cycle_position++) % plot_cycle.count];
         
         for(int i = 0; i < data_count; ++i)
         {
             f32 point_x = rect_width * (x_data[i] - plot->plot_view.x0) / (plot->plot_view.x1 - plot->plot_view.x0);
             f32 point_y = rect_height - rect_height * (y_data[i] - plot->plot_view.y0) / (plot->plot_view.y1 - plot->plot_view.y0);
             
-            if(style_flags & PLOT2D_LINES)
+            if(style_flags & Plot2DStyleFlags_Lines)
             {
                 Rect_f32 point_rect =
                 {
@@ -209,7 +150,7 @@ Plot2DPoints(Plot2DInfo *plot, i32 style_flags,
                 draw_rectangle(plot->app, point_rect, 2.f, function_color);
             }
             
-            if(style_flags & PLOT2D_POINTS)
+            if(style_flags & Plot2DStyleFlags_Points)
             {
                 Rect_f32 point_rect =
                 {
@@ -226,7 +167,7 @@ Plot2DPoints(Plot2DInfo *plot, i32 style_flags,
     
 }
 
-static void
+function void
 Plot2DHistogram(Plot2DInfo *plot, float *data, int data_count)
 {
     if(plot->bins && plot->num_bins > 0)
@@ -244,10 +185,10 @@ Plot2DHistogram(Plot2DInfo *plot, float *data, int data_count)
     }
 }
 
-static void
+function void
 Plot2DEnd(Plot2DInfo *plot)
 {
-    if(plot->mode == PLOT2D_MODE_HISTOGRAM)
+    if(plot->mode == Plot2DMode_Histogram)
     {
         f32 bin_screen_width = ((plot->screen_rect.x1-plot->screen_rect.x0) / plot->num_bins) / plot->bin_group_count;
         
@@ -260,7 +201,9 @@ Plot2DEnd(Plot2DInfo *plot)
                 total_data += plot->bins[i + bin_group*plot->num_bins];
             }
             
-            ARGB_Color color = global_plot_color_cycle[bin_group % ArrayCount(global_plot_color_cycle)];
+            Color_Array plot_cycle = finalize_color_array(fleury_color_plot_cycle);
+            ARGB_Color color =
+                plot_cycle.vals[bin_group % plot_cycle.count];
             
             for(int i = 0; i < plot->num_bins; ++i)
             {

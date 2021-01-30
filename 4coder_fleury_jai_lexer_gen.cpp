@@ -1,11 +1,15 @@
+/*
+4coder_fleury_jai_lexer_gen.cpp - Model definition for a Jai lexer.
+*/
+
 // TOP
 
-#define LANG_NAME_LOWER data_desk
-#define LANG_NAME_CAMEL DataDesk
+#define LANG_NAME_LOWER jai
+#define LANG_NAME_CAMEL Jai
 
 #include "lexer_generator/4coder_lex_gen_main.cpp"
 
- internal void
+internal void
 build_language_model(void)
 {
     u8 utf8[129];
@@ -14,7 +18,7 @@ build_language_model(void)
     smh_set_base_character_names();
     smh_typical_tokens();
     
-    // CPP Names
+    // Jai Names
     sm_char_name('!', "Not");
     sm_char_name('&', "And");
     sm_char_name('|', "Or");
@@ -23,7 +27,7 @@ build_language_model(void)
     sm_char_name('?', "Ternary");
     sm_char_name('/', "Div");
     
-    // CPP Direct Toke Kinds
+    // Jai Direct Toke Kinds
     sm_select_base_kind(TokenBaseKind_Comment);
     sm_direct_token_kind("BlockComment");
     sm_direct_token_kind("LineComment");
@@ -77,7 +81,7 @@ build_language_model(void)
     sm_select_base_kind(TokenBaseKind_Keyword);
     sm_direct_token_kind("KeywordGeneric");
     
-    // CPP Operators
+    // Jai Operators
     Operator_Set *main_ops = sm_begin_op_set();
     
     sm_select_base_kind(TokenBaseKind_ScopeOpen);
@@ -92,15 +96,12 @@ build_language_model(void)
     sm_op("]");
     sm_select_base_kind(TokenBaseKind_StatementClose);
     sm_op(";");
-    sm_op(":");
     sm_select_base_kind(TokenBaseKind_Operator);
     sm_op("...");
-    
+    sm_op(":");
     sm_op("::");
-    sm_op("++");
-    sm_op("--");
+    sm_op(":=");
     sm_op(".");
-    sm_op("->", "Arrow");
     sm_op("+");
     sm_op("-");
     sm_op("!");
@@ -108,16 +109,16 @@ build_language_model(void)
     sm_op("*");
     sm_op("&");
     sm_op(".*");
-    sm_op("->*", "ArrowStar");
     sm_op("/");
     sm_op("%");
+    sm_op("->");
+    sm_op("=>");
+    sm_op("..");
     
     sm_char_name('<', "Left");
     sm_char_name('>', "Right");
     sm_op("<<");
     sm_op(">>");
-    
-    sm_op("<=>", "Compare");
     
     sm_char_name('<', "Less");
     sm_char_name('>', "Grtr");
@@ -148,32 +149,47 @@ build_language_model(void)
     sm_select_base_kind(TokenBaseKind_StatementClose);
     sm_op(",");
     
-    // CPP Preprocess Operators
-    Operator_Set *pp_ops = sm_begin_op_set();
-    
-    sm_op("#", "PPStringify");
-    sm_op("##", "PPConcat");
-    
-    // CPP Keywords
+    // Jai Keywords
     Keyword_Set *main_keys = sm_begin_key_set("main_keys");
     
     sm_select_base_kind(TokenBaseKind_Keyword);
+    sm_key("AlignOf");
+    sm_key("Operator");
+    sm_key("Null");
+    sm_key("Inline");
+    sm_key("Using");
+    sm_key("Any", "Any");
     sm_key("Void");
+    sm_key("String");
     sm_key("Bool");
-    sm_key("Char");
-    sm_key("Int");
     sm_key("Float");
-    sm_key("Double");
-    sm_key("Long");
-    sm_key("Short");
-    sm_key("Unsigned");
-    sm_key("Signed");
-    sm_key("Const");
-    sm_key("Volatile");
-    sm_key("Asm");
+    sm_key("Float32");
+    sm_key("Float64");
+    sm_key("Int");
+    sm_key("U8");
+    sm_key("U16");
+    sm_key("U32");
+    sm_key("U64");
+    sm_key("S8");
+    sm_key("S16");
+    sm_key("S32");
+    sm_key("S64");
+    sm_key("Struct");
+    sm_key("Union");
+    sm_key("Enum");
+    sm_key("SizeOf", "size_of");
+    sm_key("New");
+    sm_key("Delete");
+    sm_key("Defer");
+    sm_key("Autocast", "xx");
+    sm_key("Remove");
+    sm_key("PushContext", "push_context");
+    sm_key("Uninitialized", "---");
+    sm_key("It", "it");
+    sm_key("ItIndex", "it_index");
+    sm_key("Context", "context");
     sm_key("Break");
     sm_key("Case");
-    sm_key("Catch");
     sm_key("Continue");
     sm_key("Default");
     sm_key("Do");
@@ -183,45 +199,8 @@ build_language_model(void)
     sm_key("If");
     sm_key("Return");
     sm_key("Switch");
-    sm_key("Try");
     sm_key("While");
-    sm_key("StaticAssert", "static_assert");
-    sm_key("ConstCast", "const_cast");
-    sm_key("DynamicCast", "dynamic_cast");
-    sm_key("ReinterpretCast", "reinterpret_cast");
-    sm_key("StaticCast", "static_cast");
-    sm_key("Class");
-    sm_key("Enum");
-    sm_key("Struct");
-    sm_key("Typedef");
-    sm_key("Union");
-    sm_key("Template");
-    sm_key("Typename");
-    sm_key("Friend");
-    sm_key("Namespace");
-    sm_key("Private");
-    sm_key("Protected");
-    sm_key("Public");
-    sm_key("Using");
-    sm_key("Extern");
-    sm_key("Export");
-    sm_key("Inline");
-    sm_key("Static");
-    sm_key("Virtual");
-    sm_key("AlignAs");
-    sm_key("Explicit");
-    sm_key("NoExcept");
-    sm_key("NullPtr");
-    sm_key("Operator");
-    sm_key("Register");
-    sm_key("This");
-    sm_key("ThreadLocal", "thread_local");
-    sm_key("SizeOf");
-    sm_key("AlignOf");
-    sm_key("DeclType");
-    sm_key("TypeID");
-    sm_key("New");
-    sm_key("Delete");
+    sm_key("Cast");
     
     sm_select_base_kind(TokenBaseKind_LiteralInteger);
     sm_key("LiteralTrue", "true");
@@ -230,30 +209,32 @@ build_language_model(void)
     sm_select_base_kind(TokenBaseKind_Identifier);
     sm_key_fallback("Identifier");
     
-    // CPP Preprocess Directives
+    // Jai Preprocess Directives
     Keyword_Set *pp_directive_set = sm_begin_key_set("pp_directives");
     
-    sm_select_base_kind(TokenBaseKind_Preprocessor);
+    sm_select_base_kind(TokenBaseKind_Identifier);
     sm_key("PPInclude", "include");
     sm_key("PPVersion", "version");
     sm_key("PPDefine", "define");
     sm_key("PPUndef", "undef");
-    sm_key("PPIf", "if");
     sm_key("PPIfDef", "ifdef");
     sm_key("PPIfNDef", "ifndef");
     sm_key("PPElse", "else");
     sm_key("PPElIf", "elif");
     sm_key("PPEndIf", "endif");
     sm_key("PPError", "error");
-    sm_key("PPImport", "import");
     sm_key("PPUsing", "using");
     sm_key("PPLine", "line");
+    sm_key("PPIf", "if");
+    sm_key("PPImport", "import");
     sm_key("PPPragma", "pragma");
+    sm_key("PPPragma", "run");
+    sm_key("PPLoad", "load");
     
     sm_select_base_kind(TokenBaseKind_LexError);
     sm_key_fallback("PPUnknown");
     
-    // CPP Preprocess Keywords
+    // Jai Preprocess Keywords
     Keyword_Set *pp_keys = sm_begin_key_set("pp_keys");
     
     sm_select_base_kind(TokenBaseKind_Keyword);
@@ -270,7 +251,7 @@ build_language_model(void)
     Flag *is_utf32 = sm_add_flag(FlagResetRule_AutoZero);
     Flag *is_char  = sm_add_flag(FlagResetRule_AutoZero);
     
-    Flag *is_pp_body      = sm_add_flag(FlagResetRule_KeepState);
+    Flag *is_pp_body      = sm_add_flag(FlagResetRule_AutoZero);
     Flag *is_include_body = sm_add_flag(FlagResetRule_KeepState);
     Flag *is_error_body   = sm_add_flag(FlagResetRule_KeepState);
     
@@ -349,6 +330,7 @@ build_language_model(void)
     AddState(comment_block_try_close);
     AddState(comment_block_newline);
     AddState(comment_line);
+    AddState(comment_line_backslashing);
     
     Operator_Set *main_ops_without_dot_or_slash = smo_copy_op_set(main_ops);
     smo_remove_ops_with_prefix(main_ops_without_dot_or_slash, ".");
@@ -404,10 +386,6 @@ build_language_model(void)
     sm_case_flagged(is_include_body, false, "\"", string);
     sm_case("\'", character);
     sm_case_flagged(is_pp_body, false, "#", pp_directive_whitespace);
-    {
-        State *operator_state = smo_op_set_lexer_root(pp_ops, root, "LexError");
-        sm_case_peek_flagged(is_pp_body, true, "#", operator_state);
-    }
     
     {
         Emit_Rule *emit = sm_emit_rule();
@@ -453,6 +431,7 @@ build_language_model(void)
     ////
     
     sm_select_state(error_body);
+    sm_case("\r", error_body);
     {
         Emit_Rule *emit = sm_emit_rule();
         sm_emit_handler_direct("PPErrorMessage");
@@ -468,6 +447,7 @@ build_language_model(void)
     ////
     
     sm_select_state(backslash);
+    sm_case("\r", backslash);
     {
         Emit_Rule *emit = sm_emit_rule();
         sm_emit_handler_direct("Backslash");
@@ -1126,8 +1106,12 @@ build_language_model(void)
         sm_emit_handler_direct("LineComment");
         sm_case_eof_peek(emit);
     }
+    sm_case("\\", comment_line_backslashing);
     sm_fallback(comment_line);
     
+    sm_select_state(comment_line_backslashing);
+    sm_case("\r", comment_line_backslashing);
+    sm_fallback(comment_line);
 }
 
 // BOTTOM

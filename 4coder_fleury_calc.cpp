@@ -1,19 +1,19 @@
 static f32 global_calc_time = 0.f;
 
-static void
-CalcUpdateOncePerFrame(Frame_Info frame_info)
+function void
+F4_CLC_Tick(Frame_Info frame_info)
 {
     global_calc_time += frame_info.literal_dt;
 }
 
 enum CalcTokenType
 {
-    CALC_TOKEN_TYPE_invalid,
-    CALC_TOKEN_TYPE_identifier,
-    CALC_TOKEN_TYPE_source_code_identifier,
-    CALC_TOKEN_TYPE_number,
-    CALC_TOKEN_TYPE_symbol,
-    CALC_TOKEN_TYPE_string_constant,
+    CalcTokenType_Invalid,
+    CalcTokenType_Identifier,
+    CalcTokenType_SourceCodeIdentifier,
+    CalcTokenType_Number,
+    CalcTokenType_Symbol,
+    CalcTokenType_StringConstant,
 };
 
 typedef struct CalcToken CalcToken;
@@ -27,13 +27,13 @@ struct CalcToken
 static CalcToken
 GetNextCalcToken(char *buffer)
 {
-    CalcToken token = { CALC_TOKEN_TYPE_invalid };
+    CalcToken token = { CalcTokenType_Invalid };
     
     enum
     {
-        READ_MODE_normal,
-        READ_MODE_single_line_comment,
-        READ_MODE_multiline_comment,
+        ReadMode_Normal,
+        ReadMode_SingleLineComment,
+        ReadMode_MultilineComment,
     };
     int read_mode = 0;
     
@@ -41,18 +41,22 @@ GetNextCalcToken(char *buffer)
     {
         for(int i = 0; buffer[i]; ++i)
         {
-            if(read_mode == READ_MODE_single_line_comment)
+            if(read_mode == ReadMode_SingleLineComment)
             {
                 if(buffer[i] == '\n')
                 {
-                    read_mode = READ_MODE_normal;
+                    read_mode = ReadMode_Normal;
                 }
             }
-            else if(read_mode == READ_MODE_multiline_comment)
+            else if(read_mode == ReadMode_MultilineComment)
             {
                 if(buffer[i] == '#' && buffer[i+1] == '#')
                 {
-                    read_mode = READ_MODE_normal;
+                    read_mode = ReadMode_Normal;
+                }
+                else if(buffer[i] == '*' && buffer[i+1] == '/')
+                {
+                    read_mode = ReadMode_Normal;
                 }
             }
             else
@@ -61,16 +65,27 @@ GetNextCalcToken(char *buffer)
                 {
                     if(buffer[i+1] == '#')
                     {
-                        read_mode = READ_MODE_multiline_comment;
+                        read_mode = ReadMode_MultilineComment;
                     }
                     else
                     {
-                        read_mode = READ_MODE_single_line_comment;
+                        read_mode = ReadMode_SingleLineComment;
+                    }
+                }
+                else if(buffer[i] == '/' && (buffer[i+1] == '/' || buffer[i+1] == '*'))
+                {
+                    if(buffer[i+1] == '/')
+                    {
+                        read_mode = ReadMode_SingleLineComment;
+                    }
+                    else
+                    {
+                        read_mode = ReadMode_MultilineComment;
                     }
                 }
                 else if(buffer[i] == '@')
                 {
-                    token.type = CALC_TOKEN_TYPE_source_code_identifier;
+                    token.type = CalcTokenType_SourceCodeIdentifier;
                     token.string = buffer+i+1;
                     int j;
                     for(j = i+1; buffer[j] &&
@@ -82,7 +97,7 @@ GetNextCalcToken(char *buffer)
                 }
                 else if(CharIsAlpha(buffer[i]))
                 {
-                    token.type = CALC_TOKEN_TYPE_identifier;
+                    token.type = CalcTokenType_Identifier;
                     token.string = buffer+i;
                     int j;
                     for(j = i+1; buffer[j] &&
@@ -94,7 +109,7 @@ GetNextCalcToken(char *buffer)
                 }
                 else if(CharIsDigit(buffer[i]))
                 {
-                    token.type = CALC_TOKEN_TYPE_number;
+                    token.type = CalcTokenType_Number;
                     token.string = buffer+i;
                     int j;
                     for(j = i+1; buffer[j] &&
@@ -106,7 +121,7 @@ GetNextCalcToken(char *buffer)
                 }
                 else if(CharIsSymbol(buffer[i]))
                 {
-                    token.type = CALC_TOKEN_TYPE_symbol;
+                    token.type = CalcTokenType_Symbol;
                     token.string = buffer+i;
                     
                     // NOTE(rjf): Assumes 1-length symbols. Might not always be true.
@@ -119,7 +134,7 @@ GetNextCalcToken(char *buffer)
                 else if(buffer[i] == '"' || buffer[i] == '\'')
                 {
                     int starting_char = buffer[i];
-                    token.type = CALC_TOKEN_TYPE_string_constant;
+                    token.type = CalcTokenType_StringConstant;
                     token.string = buffer+i;
                     int j;
                     for(j = i+1; buffer[j] && buffer[j] != starting_char; ++j);
@@ -154,7 +169,7 @@ CalcTokenMatch(CalcToken token, char *str)
     int match = 0;
     
     if(token.string && token.string_length > 0 &&
-       token.type != CALC_TOKEN_TYPE_invalid)
+       token.type != CalcTokenType_Invalid)
     {
         match = 1;
         for(int i = 0; i < token.string_length; ++i)
@@ -249,40 +264,41 @@ RequireEndOfBuffer(char **at)
 
 //~ NOTE(rjf): Calc node-types and types.
 
-#define CALC_NODE_TYPE_LIST                \
-CalcNodeType(invalid,                0)\
-CalcNodeType(error,                  0)\
-CalcNodeType(number,                 0)\
-CalcNodeType(string_constant,        0)\
-CalcNodeType(array,                  0)\
-CalcNodeType(identifier,             0)\
-CalcNodeType(source_code_identifier, 0)\
-CalcNodeType(function_call,          0)\
-CalcNodeType(add,                    1)\
-CalcNodeType(subtract,               1)\
-CalcNodeType(multiply,               2)\
-CalcNodeType(divide,                 2)\
-CalcNodeType(modulus,                2)\
-CalcNodeType(raise_to_power,         0)\
-CalcNodeType(negate,                 0)\
-CalcNodeType(assignment,             0)\
-CalcNodeType(array_index,            0)\
+#define CalcNodeType_LIST              \
+CalcNodeType(Invalid,                0)\
+CalcNodeType(Error,                  0)\
+CalcNodeType(Number,                 0)\
+CalcNodeType(StringConstant,         0)\
+CalcNodeType(Array,                  0)\
+CalcNodeType(Identifier,             0)\
+CalcNodeType(SourceCodeIdentifier,   0)\
+CalcNodeType(FunctionCall,           0)\
+CalcNodeType(Add,                    1)\
+CalcNodeType(Subtract,               1)\
+CalcNodeType(Multiply,               2)\
+CalcNodeType(Divide,                 2)\
+CalcNodeType(Modulus,                2)\
+CalcNodeType(RaiseToPower,           0)\
+CalcNodeType(Negate,                 0)\
+CalcNodeType(Assignment,             0)\
+CalcNodeType(ArrayIndex,             0)\
 
-#define CALC_TYPE_LIST                                      \
-CalcType(error,                 "error")                \
-CalcType(none,                  "none")                 \
-CalcType(number,                "number")               \
-CalcType(array,                 "array")                \
-CalcType(string,                "string")               \
-CalcType(source_code_reference, "source code reference")
+#define CalcType_LIST                                    \
+CalcType(Error,                 "error")                \
+CalcType(None,                  "none")                 \
+CalcType(Number,                "number")               \
+CalcType(Array,                 "array")                \
+CalcType(String,                "string")               \
+CalcType(SourceCodeReference,   "source code reference")
 
 
 
 //~
+
 enum CalcNodeType
 {
-#define CalcNodeType(name, precedence) CALC_NODE_TYPE_##name,
-    CALC_NODE_TYPE_LIST
+#define CalcNodeType(name, precedence) CalcNodeType_##name,
+    CalcNodeType_LIST
 #undef CalcNodeType
 };
 
@@ -292,7 +308,7 @@ CalcOperatorPrecedence(CalcNodeType type)
     static int precedence_table[] =
     {
 #define CalcNodeType(name, precedence) precedence,
-        CALC_NODE_TYPE_LIST
+        CalcNodeType_LIST
 #undef CalcNodeType
     };
     return precedence_table[type];
@@ -300,8 +316,8 @@ CalcOperatorPrecedence(CalcNodeType type)
 
 enum CalcType
 {
-#define CalcType(name, str) CALC_TYPE_##name,
-    CALC_TYPE_LIST
+#define CalcType(name, str) CalcType_##name,
+    CalcType_LIST
 #undef CalcType
 };
 
@@ -311,7 +327,7 @@ CalcTypeName(CalcType type)
     static char *name_table[] =
     {
 #define CalcType(name, str) str,
-        CALC_TYPE_LIST
+        CalcType_LIST
 #undef CalcType
     };
     return name_table[type];
@@ -357,7 +373,7 @@ ErrorCalcNode(Arena *arena, char *format, ...)
 {
     CalcNode *node = push_array(arena, CalcNode, 1);
     MemorySet(node, 0, sizeof(*node));
-    node->type = CALC_NODE_TYPE_error;
+    node->type = CalcNodeType_Error;
     va_list args;
     va_start(args, format);
     node->error_string = push_stringfv(arena, format, args);
@@ -377,30 +393,30 @@ ParseCalcUnaryExpression(Arena *arena, char **at_ptr)
     if(CalcTokenMatch(token, "-"))
     {
         NextCalcToken(at_ptr);
-        expression = AllocateCalcNode(arena, CALC_NODE_TYPE_negate, at_source);
+        expression = AllocateCalcNode(arena, CalcNodeType_Negate, at_source);
         expression->operand = ParseCalcUnaryExpression(arena, at_ptr);
     }
-    else if(token.type == CALC_TOKEN_TYPE_source_code_identifier)
+    else if(token.type == CalcTokenType_SourceCodeIdentifier)
     {
         NextCalcToken(at_ptr);
-        expression = AllocateCalcNode(arena, CALC_NODE_TYPE_source_code_identifier, at_source);
+        expression = AllocateCalcNode(arena, CalcNodeType_SourceCodeIdentifier, at_source);
         expression->token = token;
     }
-    else if(token.type == CALC_TOKEN_TYPE_identifier)
+    else if(token.type == CalcTokenType_Identifier)
     {
         NextCalcToken(at_ptr);
         
         // NOTE(rjf): Function call.
         if(RequireCalcToken(at_ptr, "("))
         {
-            expression = AllocateCalcNode(arena, CALC_NODE_TYPE_function_call, at_source);
+            expression = AllocateCalcNode(arena, CalcNodeType_FunctionCall, at_source);
             expression->token = token;
             
             CalcNode **target_param = &expression->first_parameter;
             for(;;)
             {
                 CalcToken next_token = PeekCalcToken(at_ptr);
-                if(next_token.type == CALC_TOKEN_TYPE_invalid ||
+                if(next_token.type == CalcTokenType_Invalid ||
                    CalcTokenMatch(next_token, ")"))
                 {
                     break;
@@ -431,7 +447,7 @@ ParseCalcUnaryExpression(Arena *arena, char **at_ptr)
         // NOTE(rjf): Constant or variable.
         else
         {
-            expression = AllocateCalcNode(arena, CALC_NODE_TYPE_identifier, at_source);
+            expression = AllocateCalcNode(arena, CalcNodeType_Identifier, at_source);
             expression->token = token;
         }
     }
@@ -441,29 +457,29 @@ ParseCalcUnaryExpression(Arena *arena, char **at_ptr)
         expression = ParseCalcExpression(arena, at_ptr);
         RequireCalcToken(at_ptr, ")");
     }
-    else if(token.type == CALC_TOKEN_TYPE_number)
+    else if(token.type == CalcTokenType_Number)
     {
         NextCalcToken(at_ptr);
-        expression = AllocateCalcNode(arena, CALC_NODE_TYPE_number, at_source);
+        expression = AllocateCalcNode(arena, CalcNodeType_Number, at_source);
         expression->value = GetFirstDoubleFromBuffer(token.string);
     }
-    else if(token.type == CALC_TOKEN_TYPE_string_constant)
+    else if(token.type == CalcTokenType_StringConstant)
     {
         NextCalcToken(at_ptr);
-        expression = AllocateCalcNode(arena, CALC_NODE_TYPE_string_constant, at_source);
+        expression = AllocateCalcNode(arena, CalcNodeType_StringConstant, at_source);
         expression->token = token;
     }
     else if(CalcTokenMatch(token, "["))
     {
         NextCalcToken(at_ptr);
         
-        expression = AllocateCalcNode(arena, CALC_NODE_TYPE_array, at_source);
+        expression = AllocateCalcNode(arena, CalcNodeType_Array, at_source);
         CalcNode **target_member = &expression->first_member;
         
         for(;;)
         {
             token = PeekCalcToken(at_ptr);
-            if(CalcTokenMatch(token, "]") || token.type == CALC_TOKEN_TYPE_invalid)
+            if(CalcTokenMatch(token, "]") || token.type == CalcTokenType_Invalid)
             {
                 break;
             }
@@ -491,7 +507,7 @@ ParseCalcUnaryExpression(Arena *arena, char **at_ptr)
     if(RequireCalcToken(at_ptr, "^"))
     {
         CalcNode *old_expr = expression;
-        expression = AllocateCalcNode(arena, CALC_NODE_TYPE_raise_to_power, at_source);
+        expression = AllocateCalcNode(arena, CalcNodeType_RaiseToPower, at_source);
         expression->left = old_expr;
         expression->right = ParseCalcUnaryExpression(arena, at_ptr);
     }
@@ -502,7 +518,7 @@ ParseCalcUnaryExpression(Arena *arena, char **at_ptr)
         while(RequireCalcToken(at_ptr, "["))
         {
             CalcNode *old_expr = expression;
-            expression = AllocateCalcNode(arena, CALC_NODE_TYPE_array_index, at_source);
+            expression = AllocateCalcNode(arena, CalcNodeType_ArrayIndex, at_source);
             expression->token = token;
             expression->left = old_expr;
             expression->right = ParseCalcExpression(arena, at_ptr);
@@ -528,30 +544,30 @@ ParseCalcUnaryExpression(Arena *arena, char **at_ptr)
 static CalcNodeType
 GetCalcBinaryOperatorTypeFromToken(CalcToken token)
 {
-    CalcNodeType type = CALC_NODE_TYPE_invalid;
+    CalcNodeType type = CalcNodeType_Invalid;
     switch(token.type)
     {
-        case CALC_TOKEN_TYPE_symbol:
+        case CalcTokenType_Symbol:
         {
             if(token.string[0] == '+')
             {
-                type = CALC_NODE_TYPE_add;
+                type = CalcNodeType_Add;
             }
             else if(token.string[0] == '-')
             {
-                type = CALC_NODE_TYPE_subtract;
+                type = CalcNodeType_Subtract;
             }
             else if(token.string[0] == '*')
             {
-                type = CALC_NODE_TYPE_multiply;
+                type = CalcNodeType_Multiply;
             }
             else if(token.string[0] == '/')
             {
-                type = CALC_NODE_TYPE_divide;
+                type = CalcNodeType_Divide;
             }
             else if(token.string[0] == '%')
             {
-                type = CALC_NODE_TYPE_modulus;
+                type = CalcNodeType_Modulus;
             }
             break;
         }
@@ -572,8 +588,8 @@ ParseCalcExpression_(Arena *arena, char **at_ptr, int precedence_in)
         
         char *at_source = token.string;
         
-        if(token.string && operator_type != CALC_NODE_TYPE_invalid &&
-           operator_type != CALC_NODE_TYPE_number)
+        if(token.string && operator_type != CalcNodeType_Invalid &&
+           operator_type != CalcNodeType_Number)
         {
             for(int precedence = CalcOperatorPrecedence(operator_type);
                 precedence >= precedence_in;
@@ -591,7 +607,7 @@ ParseCalcExpression_(Arena *arena, char **at_ptr, int precedence_in)
                         break;
                     }
                     
-                    if(operator_type == CALC_NODE_TYPE_invalid)
+                    if(operator_type == CalcNodeType_Invalid)
                     {
                         break;
                     }
@@ -637,7 +653,7 @@ ParseCalcCode(Arena *arena, char **at_ptr)
         CalcToken token = PeekCalcToken(at_ptr);
         
         // NOTE(rjf): Parse assignment.
-        if(token.type == CALC_TOKEN_TYPE_identifier)
+        if(token.type == CalcTokenType_Identifier)
         {
             char *at_source = token.string;
             
@@ -647,10 +663,10 @@ ParseCalcCode(Arena *arena, char **at_ptr)
             // NOTE(rjf): Variable assignment
             if(RequireCalcToken(at_ptr, "="))
             {
-                CalcNode *identifier = AllocateCalcNode(arena, CALC_NODE_TYPE_identifier, at_source);
+                CalcNode *identifier = AllocateCalcNode(arena, CalcNodeType_Identifier, at_source);
                 identifier->token = token;
                 
-                CalcNode *assignment = AllocateCalcNode(arena, CALC_NODE_TYPE_assignment, at_source);
+                CalcNode *assignment = AllocateCalcNode(arena, CalcNodeType_Assignment, at_source);
                 assignment->left = identifier;
                 assignment->right = ParseCalcExpression(arena, at_ptr);
                 
@@ -665,7 +681,7 @@ ParseCalcCode(Arena *arena, char **at_ptr)
                     *target = assignment;
                     break;
                 }
-                else if(assignment->right->type == CALC_NODE_TYPE_error)
+                else if(assignment->right->type == CalcNodeType_Error)
                 {
                     assignment = assignment->right;
                     *target = assignment;
@@ -799,7 +815,7 @@ static CalcValue
 CalcValueNone(void)
 {
     CalcValue calc_value = {0};
-    calc_value.type = CALC_TYPE_none;
+    calc_value.type = CalcType_None;
     return calc_value;
 }
 
@@ -807,7 +823,7 @@ static CalcValue
 CalcValueF64(double num)
 {
     CalcValue val = {0};
-    val.type = CALC_TYPE_number;
+    val.type = CalcType_Number;
     val.as_f64 = num;
     return val;
 }
@@ -816,7 +832,7 @@ static CalcValue
 CalcValueError(String_Const_u8 string)
 {
     CalcValue val = {0};
-    val.type = CALC_TYPE_error;
+    val.type = CalcType_Error;
     val.as_error = string;
     return val;
 }
@@ -825,7 +841,7 @@ static CalcValue
 CalcValueString(String_Const_u8 string)
 {
     CalcValue val = {0};
-    val.type = CALC_TYPE_string;
+    val.type = CalcType_String;
     val.as_string = string;
     return val;
 }
@@ -834,7 +850,7 @@ static CalcValue
 CalcValueSourceCodeReference(i64 token_position)
 {
     CalcValue val = {0};
-    val.type = CALC_TYPE_source_code_reference;
+    val.type = CalcType_SourceCodeReference;
     val.as_token_offset = token_position;
     return val;
 }
@@ -871,9 +887,9 @@ static CalcValue
 CalcValueArray(CalcInterpretContext *context, CalcNode *first_member)
 {
     CalcValue val = {0};
-    val.type = CALC_TYPE_array;
+    val.type = CalcType_Array;
     
-    CalcType array_type = CALC_TYPE_none;
+    CalcType array_type = CalcType_None;
     int count = 0;
     
     for(CalcNode *member = first_member; member; member = member->next)
@@ -892,12 +908,12 @@ CalcValueArray(CalcInterpretContext *context, CalcNode *first_member)
         if(member == first_member)
         {
             array_type = result.value.type;
-            if(array_type == CALC_TYPE_error)
+            if(array_type == CalcType_Error)
             {
                 val = result.value;
                 goto end_create;
             }
-            else if(array_type == CALC_TYPE_none)
+            else if(array_type == CalcType_None)
             {
                 val = CalcValueError(string_u8_litexpr("Cannot make arrays of 'none' type."));
                 goto end_create;
@@ -995,7 +1011,7 @@ CalcSymbolTableLookup(CalcSymbolTable *table, char *string, int string_length)
     }
     else
     {
-        result.type = CALC_TYPE_error;
+        result.type = CalcType_Error;
     }
     return result;
 }
@@ -1248,14 +1264,14 @@ GraphCalcExpression(Application_Links *app, Face_ID face_id,
         {
             
             //~ NOTE(rjf): Line Graphs
-            case PLOT2D_MODE_LINE:
+            case Plot2DMode_Line:
             {
                 Plot2DPoints(&plot_data, graph->style_flags, graph->x_data, graph->y_data, graph->data_count);
                 break;
             }
             
             //~ NOTE(rjf): Histogram
-            case PLOT2D_MODE_HISTOGRAM:
+            case Plot2DMode_Histogram:
             {
                 Plot2DHistogram(&plot_data, graph->data, graph->data_count);
                 break;
@@ -1280,9 +1296,9 @@ FindUnknownForGraph(CalcSymbolTable *table, CalcNode *expression)
 {
     CalcFindInputResult result = {0};
     
-    if(expression && expression->type != CALC_NODE_TYPE_invalid)
+    if(expression && expression->type != CalcNodeType_Invalid)
     {
-        if(expression->type == CALC_NODE_TYPE_identifier)
+        if(expression->type == CalcNodeType_Identifier)
         {
             CalcSymbolValue *symbol_value =
                 CalcSymbolTableLookup_(table, expression->token.string,
@@ -1427,20 +1443,20 @@ GenerateLinePlotData(CalcInterpretContext *context, CalcNode *expression,
     i32 style_flags = 0;
     
     //~ NOTE(rjf): Plotting scripting arrays.
-    if(expression_result.value.type == CALC_TYPE_array)
+    if(expression_result.value.type == CalcType_Array)
     {
-        style_flags |= PLOT2D_POINTS;
+        style_flags |= Plot2DStyleFlags_Points;
         
         // NOTE(rjf): X/Y data arrays.
         if(expression_result.value.array_count == 2 &&
-           expression_result.value.as_array[0].type == CALC_TYPE_array &&
-           expression_result.value.as_array[1].type == CALC_TYPE_array &&
+           expression_result.value.as_array[0].type == CalcType_Array &&
+           expression_result.value.as_array[1].type == CalcType_Array &&
            expression_result.value.as_array[0].array_count > 0 &&
            expression_result.value.as_array[0].array_count ==
            expression_result.value.as_array[1].array_count &&
            expression_result.value.as_array[0].as_array[0].type ==
            expression_result.value.as_array[1].as_array[0].type &&
-           expression_result.value.as_array[0].as_array[0].type == CALC_TYPE_number)
+           expression_result.value.as_array[0].as_array[0].type == CalcType_Number)
         {
             int values_to_plot = expression_result.value.as_array[0].array_count;
             float *x_values = push_array(context->arena, float, values_to_plot);
@@ -1459,7 +1475,7 @@ GenerateLinePlotData(CalcInterpretContext *context, CalcNode *expression,
         
         // NOTE(rjf): Just Y data.
         else if(expression_result.value.array_count > 0 &&
-                expression_result.value.as_array[0].type == CALC_TYPE_number)
+                expression_result.value.as_array[0].type == CalcType_Number)
         {
             int values_to_plot = expression_result.value.array_count;
             float *x_values = push_array(context->arena, float, values_to_plot);
@@ -1480,9 +1496,9 @@ GenerateLinePlotData(CalcInterpretContext *context, CalcNode *expression,
     
     
     //~ NOTE(rjf): Graphing data from source code.
-    else if(expression_result.value.type == CALC_TYPE_source_code_reference)
+    else if(expression_result.value.type == CalcType_SourceCodeReference)
     {
-        style_flags |= PLOT2D_POINTS;
+        style_flags |= Plot2DStyleFlags_Points;
         
         float *y_values = 0;
         int values_to_plot = 0;
@@ -1508,7 +1524,7 @@ GenerateLinePlotData(CalcInterpretContext *context, CalcNode *expression,
     //~ NOTE(rjf): Graphing scripting functions.
     else
     {
-        style_flags |= PLOT2D_LINES;
+        style_flags |= Plot2DStyleFlags_Lines;
         
         CalcNode *input_node = input_variable;
         CalcSymbolValue *symbol_value_ptr = 0;
@@ -1535,7 +1551,7 @@ GenerateLinePlotData(CalcInterpretContext *context, CalcNode *expression,
                 }
                 
                 CalcInterpretResult result = InterpretCalcExpression(context, expression);
-                if(result.value.type != CALC_TYPE_number)
+                if(result.value.type != CalcType_Number)
                 {
                     break;
                 }
@@ -1571,11 +1587,11 @@ GenerateHistogramPlotData(CalcInterpretContext *context, CalcNode *expression,
     *data_count = 0;
     
     // NOTE(rjf): Graphing scripting arrays.
-    if(expression_result.value.type == CALC_TYPE_array)
+    if(expression_result.value.type == CalcType_Array)
     {
         
         if(expression_result.value.array_count > 0 &&
-           expression_result.value.as_array[0].type == CALC_TYPE_number)
+           expression_result.value.as_array[0].type == CalcType_Number)
         {
             int values_to_plot = expression_result.value.array_count;
             float *values = push_array(context->arena, float, values_to_plot);
@@ -1592,7 +1608,7 @@ GenerateHistogramPlotData(CalcInterpretContext *context, CalcNode *expression,
     }
     
     // NOTE(rjf): Graphing data from source code.
-    else if(expression_result.value.type == CALC_TYPE_source_code_reference)
+    else if(expression_result.value.type == CalcType_SourceCodeReference)
     {
         float *values = 0;
         int values_to_plot = 0;
@@ -1626,7 +1642,7 @@ CallCalcBuiltInFunction(CalcInterpretContext *context, CalcNode *root)
     
     b32 function_valid = 0;
     
-    if(!root || root->type != CALC_NODE_TYPE_function_call)
+    if(!root || root->type != CalcNodeType_FunctionCall)
     {
         result.value = CalcValueError(string_u8_litexpr("Internal parsing error, function call expected."));
         goto end_func_call;
@@ -1642,40 +1658,40 @@ CallCalcBuiltInFunction(CalcInterpretContext *context, CalcNode *root)
     }
     functions[] =
     {
-        { "sin", CalcSin, CALC_TYPE_number, 1, { CALC_TYPE_number }, },
-        { "cos", CalcCos, CALC_TYPE_number, 1, { CALC_TYPE_number }, },
-        { "tan", CalcTan, CALC_TYPE_number, 1, { CALC_TYPE_number }, },
-        { "abs", CalcAbs, CALC_TYPE_number, 1, { CALC_TYPE_number }, },
+        { "sin", CalcSin, CalcType_Number, 1, { CalcType_Number }, },
+        { "cos", CalcCos, CalcType_Number, 1, { CalcType_Number }, },
+        { "tan", CalcTan, CalcType_Number, 1, { CalcType_Number }, },
+        { "abs", CalcAbs, CalcType_Number, 1, { CalcType_Number }, },
         
         {
             "plot_title",
             CalcPlotTitle,
-            CALC_TYPE_none,
-            1, { CALC_TYPE_string },
+            CalcType_None,
+            1, { CalcType_String },
         },
         
         {
             "plot_function_samples",
             CalcPlotFunctionSamples,
-            CALC_TYPE_none,
-            1, { CALC_TYPE_number },
+            CalcType_None,
+            1, { CalcType_Number },
         },
         
         {
             "plot_bin_count",
             CalcPlotBinCount,
-            CALC_TYPE_none,
-            1, { CALC_TYPE_number },
+            CalcType_None,
+            1, { CalcType_Number },
         },
         
         {
             "plot_bin_range",
             CalcPlotBinRange,
-            CALC_TYPE_none,
-            2, { CALC_TYPE_number, CALC_TYPE_number },
+            CalcType_None,
+            2, { CalcType_Number, CalcType_Number },
         },
         
-        { "time", CalcTime, CALC_TYPE_number, },
+        { "time", CalcTime, CalcType_Number, },
         
     };
     
@@ -1751,7 +1767,7 @@ CallCalcBuiltInFunction(CalcInterpretContext *context, CalcNode *root)
                     CalcInterpretResult interpret =
                         InterpretCalcExpression(context, param);
                     
-                    if(interpret.value.type == CALC_TYPE_string)
+                    if(interpret.value.type == CalcType_String)
                     {
                         if(title_param)
                         {
@@ -1766,7 +1782,7 @@ CallCalcBuiltInFunction(CalcInterpretContext *context, CalcNode *root)
                             title_result = interpret;
                         }
                     }
-                    else if(interpret.value.type == CALC_TYPE_number)
+                    else if(interpret.value.type == CalcType_Number)
                     {
                         if(low_param)
                         {
@@ -1848,11 +1864,11 @@ CallCalcBuiltInFunction(CalcInterpretContext *context, CalcNode *root)
                 }
                 plot_functions[] =
                 {
-                    { "plot",           PLOT2D_MODE_LINE,       },
-                    { "plot_histogram", PLOT2D_MODE_HISTOGRAM,  },
+                    { "plot",           Plot2DMode_Line,       },
+                    { "plot_histogram", Plot2DMode_Histogram,  },
                 };
                 
-                Plot2DMode mode = PLOT2D_MODE_LINE;
+                Plot2DMode mode = Plot2DMode_Line;
                 for(int j = 0; j < ArrayCount(plot_functions); ++j)
                 {
                     if(CalcTokenMatch(root->token, plot_functions[j].name))
@@ -1890,7 +1906,7 @@ CallCalcBuiltInFunction(CalcInterpretContext *context, CalcNode *root)
                         
                         // NOTE(rjf): Generate the plotting data.
                         {
-                            if(mode == PLOT2D_MODE_LINE)
+                            if(mode == Plot2DMode_Line)
                             {
                                 GenerateLinePlotData(context, graph_expression,
                                                      input_variable, &new_graph->x_data,
@@ -1898,7 +1914,7 @@ CallCalcBuiltInFunction(CalcInterpretContext *context, CalcNode *root)
                                                      &new_graph->data_count,
                                                      &new_graph->style_flags);
                             }
-                            else if(mode == PLOT2D_MODE_HISTOGRAM)
+                            else if(mode == Plot2DMode_Histogram)
                             {
                                 GenerateHistogramPlotData(context, graph_expression,
                                                           input_variable, &new_graph->data,
@@ -1943,32 +1959,32 @@ InterpretCalcExpression(CalcInterpretContext *context, CalcNode *root)
     {
         switch(root->type)
         {
-            case CALC_NODE_TYPE_error:
+            case CalcNodeType_Error:
             {
                 result.value = CalcValueError(root->error_string);
                 break;
             }
             
-            case CALC_NODE_TYPE_number:
+            case CalcNodeType_Number:
             {
                 result.value = CalcValueF64(root->value);
                 break;
             }
             
-            case CALC_NODE_TYPE_array:
+            case CalcNodeType_Array:
             {
                 result.value = CalcValueArray(context, root->first_member);
                 break;
             }
             
-            case CALC_NODE_TYPE_array_index:
+            case CalcNodeType_ArrayIndex:
             {
                 result = InterpretCalcExpression(context, root->left);
-                if(result.value.type == CALC_TYPE_array)
+                if(result.value.type == CalcType_Array)
                 {
                     CalcInterpretResult index = InterpretCalcExpression(context, root->right);
                     
-                    if(index.value.type == CALC_TYPE_number)
+                    if(index.value.type == CalcType_Number)
                     {
                         int array_index = (int)index.value.as_f64;
                         if(array_index >= 0 && array_index < result.value.array_count)
@@ -1995,37 +2011,37 @@ InterpretCalcExpression(CalcInterpretContext *context, CalcNode *root)
                 break;
             }
             
-            case CALC_NODE_TYPE_string_constant:
+            case CalcNodeType_StringConstant:
             {
-                result.value = CalcValueString({root->token.string, (u64)root->token.string_length});
+                result.value = CalcValueString({(u8 *)root->token.string, (u64)root->token.string_length});
                 break;
             }
             
-            case CALC_NODE_TYPE_add:
-            case CALC_NODE_TYPE_subtract:
-            case CALC_NODE_TYPE_multiply:
-            case CALC_NODE_TYPE_divide:
-            case CALC_NODE_TYPE_modulus:
-            case CALC_NODE_TYPE_raise_to_power:
+            case CalcNodeType_Add:
+            case CalcNodeType_Subtract:
+            case CalcNodeType_Multiply:
+            case CalcNodeType_Divide:
+            case CalcNodeType_Modulus:
+            case CalcNodeType_RaiseToPower:
             {
                 if(root->left && root->right)
                 {
                     CalcInterpretResult left_result = InterpretCalcExpression(context, root->left);
                     CalcInterpretResult right_result = InterpretCalcExpression(context, root->right);
                     
-                    if(left_result.value.type == CALC_TYPE_error)
+                    if(left_result.value.type == CalcType_Error)
                     {
                         result = left_result;
                         goto end_interpret;
                     }
-                    else if(right_result.value.type == CALC_TYPE_error)
+                    else if(right_result.value.type == CalcType_Error)
                     {
                         result = right_result;
                         goto end_interpret;
                     }
                     
-                    else if(left_result.value.type != CALC_TYPE_number ||
-                            right_result.value.type != CALC_TYPE_number)
+                    else if(left_result.value.type != CalcType_Number ||
+                            right_result.value.type != CalcType_Number)
                     {
                         result.value = CalcValueError(string_u8_litexpr("Cannot use non-numbers in expressions."));
                         goto end_interpret;
@@ -2033,10 +2049,10 @@ InterpretCalcExpression(CalcInterpretContext *context, CalcNode *root)
                     
                     switch(root->type)
                     {
-                        case CALC_NODE_TYPE_add:            result.value = CalcValueF64(left_result.value.as_f64 + right_result.value.as_f64); break;
-                        case CALC_NODE_TYPE_subtract:       result.value = CalcValueF64(left_result.value.as_f64 - right_result.value.as_f64); break;
-                        case CALC_NODE_TYPE_multiply:       result.value = CalcValueF64(left_result.value.as_f64 * right_result.value.as_f64); break;
-                        case CALC_NODE_TYPE_divide:
+                        case CalcNodeType_Add:            result.value = CalcValueF64(left_result.value.as_f64 + right_result.value.as_f64); break;
+                        case CalcNodeType_Subtract:       result.value = CalcValueF64(left_result.value.as_f64 - right_result.value.as_f64); break;
+                        case CalcNodeType_Multiply:       result.value = CalcValueF64(left_result.value.as_f64 * right_result.value.as_f64); break;
+                        case CalcNodeType_Divide:
                         {
                             if(right_result.value.as_f64 == 0)
                             {
@@ -2048,7 +2064,7 @@ InterpretCalcExpression(CalcInterpretContext *context, CalcNode *root)
                             }
                             break;
                         }
-                        case CALC_NODE_TYPE_modulus:
+                        case CalcNodeType_Modulus:
                         {
                             if(right_result.value.as_f64 == 0)
                             {
@@ -2060,7 +2076,7 @@ InterpretCalcExpression(CalcInterpretContext *context, CalcNode *root)
                             }
                             break;
                         }
-                        case CALC_NODE_TYPE_raise_to_power:
+                        case CalcNodeType_RaiseToPower:
                         {
                             result.value = CalcValueF64(pow(left_result.value.as_f64, right_result.value.as_f64));
                             break;
@@ -2076,26 +2092,26 @@ InterpretCalcExpression(CalcInterpretContext *context, CalcNode *root)
                 break;
             }
             
-            case CALC_NODE_TYPE_negate:
+            case CalcNodeType_Negate:
             {
                 result = InterpretCalcExpression(context, root->operand);
-                if(result.value.type == CALC_TYPE_number)
+                if(result.value.type == CalcType_Number)
                 {
                     result.value = CalcValueF64(-result.value.as_f64);
                 }
                 break;
             }
             
-            case CALC_NODE_TYPE_function_call:
+            case CalcNodeType_FunctionCall:
             {
                 result = CallCalcBuiltInFunction(context, root);
                 break;
             }
             
-            case CALC_NODE_TYPE_identifier:
+            case CalcNodeType_Identifier:
             {
                 result.value = CalcSymbolTableLookup(context->symbol_table, root->token.string, root->token.string_length);
-                if(result.value.type == CALC_TYPE_error)
+                if(result.value.type == CalcType_Error)
                 {
                     result.value = CalcValueError(push_stringf(context->arena, "'%.*s' is not declared.", root->token.string_length, root->token.string));
                 }
@@ -2103,7 +2119,7 @@ InterpretCalcExpression(CalcInterpretContext *context, CalcNode *root)
                 break;
             }
             
-            case CALC_NODE_TYPE_source_code_identifier:
+            case CalcNodeType_SourceCodeIdentifier:
             {
                 Token_Array token_array = get_token_array_from_buffer(context->app, context->buffer);
                 Range_i64 visible_range = text_layout_get_visible_range(context->app, context->text_layout_id);
@@ -2137,7 +2153,7 @@ InterpretCalcExpression(CalcInterpretContext *context, CalcNode *root)
                             token_string = { token_buffer, (u64)(token_range.end - token_range.start) };
                         }
                         
-                        if(StringMatchCaseSensitive((char *)token_string.data, (int)token_string.size,
+                        if(StringMatchCaseSensitive((char *)token_string.str, (int)token_string.size,
                                                     root->token.string, root->token.string_length))
                         {
                             result.value = CalcValueSourceCodeReference(token->pos);
@@ -2162,7 +2178,7 @@ IdentifierExistsInCalcExpression(CalcNode *root, char *string, int string_length
 {
     int result = 0;
     
-    if(root && root->type != CALC_NODE_TYPE_invalid)
+    if(root && root->type != CalcNodeType_Invalid)
     {
         if(StringMatchCaseSensitive(root->token.string, root->token.string_length, string, string_length))
         {
@@ -2190,14 +2206,14 @@ InterpretCalcCode(CalcInterpretContext *context, CalcNode *root)
     {
         last_result = result;
         
-        if(root->type == CALC_NODE_TYPE_error)
+        if(root->type == CalcNodeType_Error)
         {
             result.value = CalcValueError(root->error_string);
             goto end_interpret;
         }
-        else if(root->type == CALC_NODE_TYPE_assignment)
+        else if(root->type == CalcNodeType_Assignment)
         {
-            if(root->left->type == CALC_NODE_TYPE_identifier)
+            if(root->left->type == CalcNodeType_Identifier)
             {
                 if(!IdentifierExistsInCalcExpression(root->right, root->left->token.string, root->left->token.string_length))
                 {
@@ -2235,7 +2251,7 @@ InterpretCalcCode(CalcInterpretContext *context, CalcNode *root)
                 
                 result.first_graph = last_result.first_graph;
             }
-            else if(result.value.type == CALC_TYPE_error)
+            else if(result.value.type == CalcType_Error)
             {
                 goto end_interpret;
             }
@@ -2274,8 +2290,8 @@ CalcInterpretContextInit(Application_Links *app, Buffer_ID buffer, Text_Layout_I
     return context;
 }
 
-static void
-F4_RenderCalcCode(Application_Links *app, Buffer_ID buffer,
+function void
+F4_CLC_RenderCode(Application_Links *app, Buffer_ID buffer,
                   View_ID view, Text_Layout_ID text_layout_id,
                   Frame_Info frame_info, Arena *arena, char *code_buffer,
                   i64 start_char_offset)
@@ -2342,7 +2358,7 @@ F4_RenderCalcCode(Application_Links *app, Buffer_ID buffer,
                 
                 switch(result.value.type)
                 {
-                    case CALC_TYPE_error:
+                    case CalcType_Error:
                     {
                         if(expr == 0 || !result.value.as_error.size)
                         {
@@ -2354,12 +2370,12 @@ F4_RenderCalcCode(Application_Links *app, Buffer_ID buffer,
                         }
                         break;
                     }
-                    case CALC_TYPE_number:
+                    case CalcType_Number:
                     {
                         result_string = push_stringf(arena, "= %f", result.value.as_f64);
                         break;
                     }
-                    case CALC_TYPE_string:
+                    case CalcType_String:
                     {
                         result_string = push_stringf(arena, "= %.*s", string_expand(result.value.as_string));
                         break;
@@ -2419,8 +2435,8 @@ F4_RenderCalcCode(Application_Links *app, Buffer_ID buffer,
     }
 }
 
-static void
-F4_RenderCalcBuffer(Application_Links *app, Buffer_ID buffer, View_ID view,
+function void
+F4_CLC_RenderBuffer(Application_Links *app, Buffer_ID buffer, View_ID view,
                     Text_Layout_ID text_layout_id, Frame_Info frame_info)
 {
     Scratch_Block scratch(app);
@@ -2428,14 +2444,19 @@ F4_RenderCalcBuffer(Application_Links *app, Buffer_ID buffer, View_ID view,
     char *code_buffer = push_array(scratch, char, (u32)(visible_range.end - visible_range.start) + 1);
     MemorySet(code_buffer, 0, (u32)(visible_range.end - visible_range.start) + 1);
     buffer_read_range(app, buffer, visible_range, (u8 *)code_buffer);
-    F4_RenderCalcCode(app, buffer, view, text_layout_id, frame_info, scratch,
+    F4_CLC_RenderCode(app, buffer, view, text_layout_id, frame_info, scratch,
                       code_buffer, visible_range.start);
 }
 
-static void
-F4_RenderCalcComments(Application_Links *app, Buffer_ID buffer, View_ID view,
+function void
+F4_CLC_RenderComments(Application_Links *app, Buffer_ID buffer, View_ID view,
                       Text_Layout_ID text_layout_id, Frame_Info frame_info)
 {
+    if(def_get_config_b32(vars_save_string_lit("f4_disable_calc_comments")))
+    {
+        return;
+    }
+    
     ProfileScope(app, "[Fleury] Calc Comments");
     
     Scratch_Block scratch(app);
@@ -2493,14 +2514,9 @@ F4_RenderCalcComments(Application_Links *app, Buffer_ID buffer, View_ID view,
                     
                     char *at = (char *)token_buffer + 3;
                     
-                    F4_RenderCalcCode(app, buffer, view, text_layout_id, frame_info,
-                                      scratch, at, token_range.start + 3);
+                    F4_CLC_RenderCode(app, buffer, view, text_layout_id, frame_info, scratch, at, token_range.start + 3);
                 }
-                
             }
-            
         }
-        
     }
-    
 }
