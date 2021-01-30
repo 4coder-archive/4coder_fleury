@@ -51,8 +51,11 @@ F4_RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id,
     // NOTE(rjf): Brace highlight
     {
         Color_Array colors = finalize_color_array(fleury_color_brace_highlight);
-        F4_Brace_RenderHighlight(app, buffer, text_layout_id, cursor_pos,
-                                 colors.vals, colors.count);
+        if(colors.count >= 1 && F4_ARGBIsValid(colors.vals[0]))
+        {
+            F4_Brace_RenderHighlight(app, buffer, text_layout_id, cursor_pos,
+                                     colors.vals, colors.count);
+        }
     }
     
     // NOTE(allen): Line highlight
@@ -234,7 +237,11 @@ F4_RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id,
     if(is_active_view == 0)
     {
         Rect_f32 view_rect = view_get_screen_rect(app, view_id);
-        draw_rectangle(app, view_rect, 0.f, fcolor_resolve(fcolor_id(fleury_color_inactive_pane_overlay)));
+        ARGB_Color color = fcolor_resolve(fcolor_id(fleury_color_inactive_pane_overlay));
+        if(F4_ARGBIsValid(color))
+        {
+            draw_rectangle(app, view_rect, 0.f, color);
+        }
     }
     
     // NOTE(rjf): Render code peek.
@@ -326,7 +333,10 @@ F4_DrawFileBar(Application_Links *app, View_ID view_id, Buffer_ID buffer, Face_I
             bar.y1,
         };
         ARGB_Color progress_bar_color = fcolor_resolve(fcolor_id(fleury_color_file_progress_bar));
-        draw_rectangle(app, progress_bar_rect, 0, progress_bar_color);
+        if(F4_ARGBIsValid(progress_bar_color))
+        {
+            draw_rectangle(app, progress_bar_rect, 0, progress_bar_color);
+        }
     }
 }
 
@@ -358,7 +368,11 @@ F4_Render(Application_Links *app, Frame_Info frame_info, View_ID view_id)
         // NOTE(rjf): Inactive background color.
         else if(is_active_view == 0)
         {
-            color = fcolor_resolve(fcolor_id(fleury_color_inactive_pane_background));
+            ARGB_Color inactive_bg_color = fcolor_resolve(fcolor_id(fleury_color_inactive_pane_background));
+            if(F4_ARGBIsValid(inactive_bg_color))
+            {
+                color = inactive_bg_color;
+            }
         }
         
         draw_rectangle(app, region, 0.f, color);

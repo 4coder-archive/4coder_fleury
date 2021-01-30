@@ -33,6 +33,12 @@ global F4_SyntaxOptions f4_syntax_opts[] =
 };
 global i32 f4_active_syntax_opt_idx = 0;
 
+function b32
+F4_ARGBIsValid(ARGB_Color color)
+{
+    return color != 0xFF990099;
+}
+
 internal void
 F4_TickColors(Application_Links *app, Frame_Info frame_info)
 {
@@ -170,6 +176,8 @@ F4_GetColor(Application_Links *app, ColorCtx ctx)
                         
                         default: color = 0xffff00ff; break;
                     }
+                    
+                    if(!F4_ARGBIsValid(color)) { color = default_color; }
                 }
                 
             }break;
@@ -180,14 +188,18 @@ F4_GetColor(Application_Links *app, ColorCtx ctx)
             case TokenBaseKind_LiteralString:    { FillFromFlag(F4_SyntaxFlag_Literals); color = F4_ARGBFromID(table, defcolor_str_constant); } break;
             case TokenBaseKind_LiteralInteger:   { FillFromFlag(F4_SyntaxFlag_Literals); color = F4_ARGBFromID(table, defcolor_int_constant); } break;
             case TokenBaseKind_LiteralFloat:     { FillFromFlag(F4_SyntaxFlag_Literals); color = F4_ARGBFromID(table, defcolor_float_constant); } break;
-            case TokenBaseKind_Operator:         { FillFromFlag(F4_SyntaxFlag_Operators); color = F4_ARGBFromID(table, fleury_color_operators); } break;
+            case TokenBaseKind_Operator:         { FillFromFlag(F4_SyntaxFlag_Operators); color = F4_ARGBFromID(table, fleury_color_operators); if(!F4_ARGBIsValid(color)) { color = default_color; } } break;
             
             case TokenBaseKind_ScopeOpen:
             case TokenBaseKind_ScopeClose:
             case TokenBaseKind_ParentheticalOpen:
             case TokenBaseKind_ParentheticalClose:
             case TokenBaseKind_StatementClose:
-            { color = F4_ARGBFromID(table, fleury_color_syntax_crap); break; }
+            {
+                color = F4_ARGBFromID(table, fleury_color_syntax_crap);
+                if(!F4_ARGBIsValid(color)) { color = default_color; }
+                break;
+            }
             
             default:
             {
@@ -250,6 +262,7 @@ F4_SyntaxHighlight(Application_Links *app, Text_Layout_ID text_layout_id, Token_
     Range_i64 visible_range = text_layout_get_visible_range(app, text_layout_id);
     i64 first_index = token_index_from_pos(array, visible_range.first);
     Token_Iterator_Array it = token_iterator_index(0, array, first_index);
+    ARGB_Color comment_tag_color = F4_ARGBFromID(table, fleury_color_index_comment_tag, 0);
     
     for(;;)
     {
@@ -262,6 +275,7 @@ F4_SyntaxHighlight(Application_Links *app, Text_Layout_ID text_layout_id, Token_
         paint_text_color(app, text_layout_id, Ii64_size(token->pos, token->size), argb);
         
         // NOTE(rjf): Substrings from comments
+        if(F4_ARGBIsValid(comment_tag_color))
         {
             if(token->kind == TokenBaseKind_Comment)
             {
@@ -279,7 +293,7 @@ F4_SyntaxHighlight(Application_Links *app, Text_Layout_ID text_layout_id, Token_
                                 break;
                             }
                         }
-                        paint_text_color(app, text_layout_id, Ii64(token->pos + (i64)i, token->pos + (i64)j), F4_ARGBFromID(table, fleury_color_index_comment_tag, 0));
+                        paint_text_color(app, text_layout_id, Ii64(token->pos + (i64)i, token->pos + (i64)j), comment_tag_color);
                     }
                 }
             }
