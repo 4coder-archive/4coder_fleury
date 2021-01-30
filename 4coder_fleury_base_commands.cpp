@@ -21,7 +21,7 @@ F4_Search(Application_Links *app, Scan_Direction dir)
         i64 cursor_line = get_line_number_from_pos(app, buffer, cursor);
         i64 mark_line = get_line_number_from_pos(app, buffer, mark);
         String_Const_u8 query_init = (fcoder_mode != FCoderMode_NotepadLike || cursor == mark || cursor_line != mark_line) ? SCu8() : push_buffer_range(app, scratch, buffer, Ii64(cursor, mark));
-        isearch(app, Scan_Backward, cursor, query_init);
+        isearch(app, dir, cursor, query_init);
     }
 }
 
