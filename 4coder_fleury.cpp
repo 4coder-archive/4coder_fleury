@@ -138,6 +138,10 @@
 //
 // - fleury_color_token_highlight: The color used to underline/highlight
 //   tokens that the cursor is over.
+//
+// - fleury_color_comment_user_name: The color used to highlight the
+//   username in comments.
+
 
 //~ @f4_render_intro Rendering Features
 //

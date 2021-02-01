@@ -26,7 +26,7 @@ F4_RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id,
             {
                 {str8_lit("NOTE"), finalize_color(defcolor_comment_pop, 0)},
                 {str8_lit("TODO"), finalize_color(defcolor_comment_pop, 1)},
-                {def_get_config_string(scratch, vars_save_string_lit("user_name")), 0xffffdd23},
+                {def_get_config_string(scratch, vars_save_string_lit("user_name")), finalize_color(fleury_color_comment_user_name, 0)},
             };
             draw_comment_highlights(app, buffer, text_layout_id,
                                     &token_array, pairs, ArrayCount(pairs));
