@@ -165,6 +165,8 @@ internal F4_LANGUAGE_INDEXFILE(F4_CPP_IndexFile)
             //~ NOTE(rjf): Regular Typedef
             else
             {
+                Token *aliased_type_token = token_it_read(&ctx->it);
+
                 for(;token_it_inc_all(&ctx->it);)
                 {
                     Token *token = token_it_read(&ctx->it);
@@ -184,10 +186,17 @@ internal F4_LANGUAGE_INDEXFILE(F4_CPP_IndexFile)
                 F4_Index_SeekToken(ctx, S8Lit(";"));
                 if(name)
                 {
+                    F4_Index_Note* aliased_type_index_note = F4_Index_LookupNote(F4_Index_StringFromToken(ctx, aliased_type_token));
+                    F4_Index_NoteFlags flags = 0;
+                    
+                    if (aliased_type_index_note) {
+                        flags = aliased_type_index_note->flags;
+                    }
+
                     F4_Index_MakeNote(ctx->app, ctx->file, 0,
                                       F4_Index_StringFromToken(ctx, name),
                                       F4_Index_NoteKind_Type,
-                                      0, Ii64(name));
+                                      flags, Ii64(name));
                 }
             }
             
