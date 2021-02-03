@@ -8,7 +8,10 @@ F4_CPP_SkipParseBody(F4_Index_ParseCtx *ctx)
     for(;!ctx->done;)
     {
         Token *token = token_it_read(&ctx->it);
-        if(token->sub_kind == TokenCppKind_BraceOp)
+        if (!token) {
+            ctx->done = true;
+        }
+        else if(token->sub_kind == TokenCppKind_BraceOp)
         {
             nest += 1;
             body_found = 1;
@@ -18,11 +21,11 @@ F4_CPP_SkipParseBody(F4_Index_ParseCtx *ctx)
             nest -= 1;
             if(nest == 0)
             {
+                F4_Index_ParseCtx_Inc(ctx, F4_Index_TokenSkipFlag_SkipWhitespace);
                 break;
             }
         }
-        else
-        {
+        else if(body_found == 0) {
             break;
         }
         
@@ -83,6 +86,18 @@ internal F4_LANGUAGE_INDEXFILE(F4_CPP_IndexFile)
                                   F4_Index_StringFromToken(ctx, name),
                                   F4_Index_NoteKind_Type,
                                   note_flags, Ii64(name));
+                
+                // NOTE(jack): clear the prototype flag so that the typedef'd name
+                // is not flagged as a prototype
+                note_flags &= ~F4_Index_NoteFlag_Prototype;
+                if (F4_Index_RequireTokenKind(ctx, TokenBaseKind_Identifier, &name, flags))
+                {
+                    F4_Index_MakeNote(ctx->app, ctx->file, 0,
+                                      F4_Index_StringFromToken(ctx, name),
+                                      F4_Index_NoteKind_Type,
+                                      note_flags, Ii64(name));
+                }
+
             }
             
             //~ NOTE(rjf): Unions
@@ -100,6 +115,17 @@ internal F4_LANGUAGE_INDEXFILE(F4_CPP_IndexFile)
                                   F4_Index_StringFromToken(ctx, name),
                                   F4_Index_NoteKind_Type,
                                   note_flags, Ii64(name));
+                
+                // NOTE(jack): clear the prototype flag so that the typedef'd name
+                // is not flagged as a prototype
+                note_flags &= ~F4_Index_NoteFlag_Prototype;
+                if (F4_Index_RequireTokenKind(ctx, TokenBaseKind_Identifier, &name, flags))
+                {
+                    F4_Index_MakeNote(ctx->app, ctx->file, 0,
+                                      F4_Index_StringFromToken(ctx, name),
+                                      F4_Index_NoteKind_Type,
+                                      note_flags, Ii64(name));
+                }
             }
             
             //~ NOTE(rjf): Enums
@@ -154,6 +180,17 @@ internal F4_LANGUAGE_INDEXFILE(F4_CPP_IndexFile)
                 }
                 
                 if(name)
+                {
+                    F4_Index_MakeNote(ctx->app, ctx->file, 0,
+                                      F4_Index_StringFromToken(ctx, name),
+                                      F4_Index_NoteKind_Type,
+                                      note_flags, Ii64(name));
+                }
+                
+                // NOTE(jack): clear the prototype flag so that the typedef'd name
+                // is not flagged as a prototype
+                note_flags &= ~F4_Index_NoteFlag_Prototype;
+                if (F4_Index_RequireTokenKind(ctx, TokenBaseKind_Identifier, &name, flags))
                 {
                     F4_Index_MakeNote(ctx->app, ctx->file, 0,
                                       F4_Index_StringFromToken(ctx, name),
