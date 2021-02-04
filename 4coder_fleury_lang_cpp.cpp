@@ -259,16 +259,16 @@ internal F4_LANGUAGE_INDEXFILE(F4_CPP_IndexFile)
                 if(name)
                 {
                     F4_Index_Note* aliased_type_index_note = F4_Index_LookupNote(F4_Index_StringFromToken(ctx, aliased_type_token));
-                    F4_Index_NoteFlags flags = 0;
+                    F4_Index_NoteFlags note_flags = 0;
                     
                     if (aliased_type_index_note) {
-                        flags = aliased_type_index_note->flags;
+                        note_flags = aliased_type_index_note->flags;
                     }
 
                     F4_Index_MakeNote(ctx->app, ctx->file, 0,
                                       F4_Index_StringFromToken(ctx, name),
                                       F4_Index_NoteKind_Type,
-                                      flags, Ii64(name));
+                                      note_flags, Ii64(name));
                 }
             }
             
