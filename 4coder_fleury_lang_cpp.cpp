@@ -1,4 +1,27 @@
 
+internal void
+F4_CPP_ParseMacroDefinition(F4_Index_ParseCtx *ctx, F4_Index_TokenSkipFlags flags)
+{
+    Token *name = 0;
+    F4_Index_ParseCtx_Inc(ctx, F4_Index_TokenSkipFlag_SkipWhitespace);
+    if(F4_Index_RequireTokenKind(ctx, TokenBaseKind_Identifier, &name, flags))
+    {
+        F4_Index_MakeNote(ctx->app, ctx->file, 0, F4_Index_StringFromToken(ctx, name),
+                            F4_Index_NoteKind_Macro, 0, Ii64(name));
+    }
+
+    for(;!ctx->done;)
+    {
+        Token *token = token_it_read(&ctx->it);
+        if(!(token->flags & TokenBaseFlag_PreprocessorBody) ||
+            token->kind == TokenBaseKind_Preprocessor)
+        {
+            break;
+        }
+        F4_Index_ParseCtx_IncWs(ctx);
+    }
+}
+
 internal b32
 F4_CPP_SkipParseBody(F4_Index_ParseCtx *ctx)
 {
@@ -8,8 +31,20 @@ F4_CPP_SkipParseBody(F4_Index_ParseCtx *ctx)
     for(;!ctx->done;)
     {
         Token *token = token_it_read(&ctx->it);
+        Token *name;
         if (!token) {
             ctx->done = true;
+        }
+        // NOTE(jack): Comments and macros can occur inside bodies that we would like to skip,
+        //             and should still be indexed.
+        else if(F4_Index_RequireTokenKind(ctx, TokenBaseKind_Comment, &name, F4_Index_TokenSkipFlag_SkipWhitespace))
+        {
+            F4_Index_ParseComment(ctx, name);
+        }
+        // NOTE(jack): Macros
+        else if(F4_Index_PeekTokenSubKind(ctx, TokenCppKind_PPDefine, 0))
+        {
+            F4_CPP_ParseMacroDefinition(ctx, F4_Index_TokenSkipFlag_SkipWhitespace);
         }
         else if(token->sub_kind == TokenCppKind_BraceOp)
         {
@@ -243,24 +278,7 @@ internal F4_LANGUAGE_INDEXFILE(F4_CPP_IndexFile)
         else if(F4_Index_PeekTokenSubKind(ctx, TokenCppKind_PPDefine, 0))
         {
             handled = 1;
-            
-            F4_Index_ParseCtx_Inc(ctx, F4_Index_TokenSkipFlag_SkipWhitespace);
-            if(F4_Index_RequireTokenKind(ctx, TokenBaseKind_Identifier, &name, flags))
-            {
-                F4_Index_MakeNote(ctx->app, ctx->file, 0, F4_Index_StringFromToken(ctx, name),
-                                  F4_Index_NoteKind_Macro, 0, Ii64(name));
-            }
-            
-            for(;!ctx->done;)
-            {
-                Token *token = token_it_read(&ctx->it);
-                if(!(token->flags & TokenBaseFlag_PreprocessorBody) ||
-                   token->kind == TokenBaseKind_Preprocessor)
-                {
-                    break;
-                }
-                F4_Index_ParseCtx_IncWs(ctx);
-            }
+            F4_CPP_ParseMacroDefinition(ctx, flags);
         }
         
         //~ NOTE(rjf): Comment Tags
