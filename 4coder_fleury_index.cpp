@@ -527,12 +527,12 @@ F4_Index_ParseComment(F4_Index_ParseCtx *ctx, Token *token)
     {
         if(string.str[i] == '@')
         {
-            F4_Index_MakeNote(ctx->app, ctx->file, 0, string_substring(string, Ii64(i, string.size-1)), F4_Index_NoteKind_CommentTag, 0, Ii64(token));
+            F4_Index_MakeNote(ctx->app, ctx->file, 0, string_substring(string, Ii64(i, string.size)), F4_Index_NoteKind_CommentTag, 0, Ii64(token));
             break;
         }
         else if(i+4 < string.size && string_match(S8Lit("TODO"), string_substring(string, Ii64(i, i + 4))))
         {
-            F4_Index_MakeNote(ctx->app, ctx->file, 0, string_substring(string, Ii64(i, string.size-1)), F4_Index_NoteKind_CommentToDo, 0, Ii64(token));
+            F4_Index_MakeNote(ctx->app, ctx->file, 0, string_substring(string, Ii64(i, string.size)), F4_Index_NoteKind_CommentToDo, 0, Ii64(token));
         }
     }
 }
