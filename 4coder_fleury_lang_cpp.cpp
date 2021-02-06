@@ -37,7 +37,7 @@ F4_CPP_SkipParseBody(F4_Index_ParseCtx *ctx)
         }
         // NOTE(jack): Comments and macros can occur inside bodies that we would like to skip,
         //             and should still be indexed.
-        else if(F4_Index_RequireTokenKind(ctx, TokenBaseKind_Comment, &name, F4_Index_TokenSkipFlag_SkipWhitespace))
+        else if(F4_Index_PeekTokenKind(ctx, TokenBaseKind_Comment, &name))
         {
             F4_Index_ParseComment(ctx, name);
         }
@@ -56,7 +56,6 @@ F4_CPP_SkipParseBody(F4_Index_ParseCtx *ctx)
             nest -= 1;
             if(nest == 0)
             {
-                F4_Index_ParseCtx_Inc(ctx, F4_Index_TokenSkipFlag_SkipWhitespace);
                 break;
             }
         }
