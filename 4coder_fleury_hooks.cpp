@@ -102,22 +102,6 @@ F4_RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id,
         F4_RenderErrorAnnotations(app, buffer, text_layout_id, compilation_buffer);
     }
     
-#if 0
-    // NOTE(rjf): Token highlight
-    {
-        ProfileScope(app, "[Fleury] Token Highlight");
-        
-        Token_Iterator_Array it = token_iterator_pos(0, &token_array, cursor_pos);
-        Token *token = token_it_read(&it);
-        if(token && token->kind == TokenBaseKind_Identifier)
-        {
-            F4_RenderRangeHighlight(app, view_id, text_layout_id,
-                                    Ii64(token->pos, token->pos + token->size),
-                                    F4_RangeHighlightKind_Underline);
-        }
-    }
-#endif 
-    
     // NOTE(jack): Token Occurance Highlight
     if (!def_get_config_b32(vars_save_string_lit("f4_disable_cursor_token_occurance"))) 
     {
