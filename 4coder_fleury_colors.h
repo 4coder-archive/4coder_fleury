@@ -22,6 +22,7 @@ CUSTOM_ID(colors, fleury_color_cursor_power_mode);
 CUSTOM_ID(colors, fleury_color_plot_cycle);
 CUSTOM_ID(colors, fleury_color_token_highlight);
 CUSTOM_ID(colors, fleury_color_comment_user_name);
+CUSTOM_ID(colors, fleury_color_error_annotation);
 
 static ARGB_Color F4_ARGBFromID(Color_Table table, Managed_ID id, int subindex);
 static ARGB_Color F4_ARGBFromID(Color_Table table, Managed_ID id);
