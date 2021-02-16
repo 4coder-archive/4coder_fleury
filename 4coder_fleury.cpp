@@ -141,6 +141,9 @@
 //
 // - fleury_color_comment_user_name: The color used to highlight the
 //   username in comments.
+// 
+// - fleury_color_error_annotation: Text color used for the inline error
+//   message string with F4_RenderErrorAnnotations
 
 
 //~ @f4_render_intro Rendering Features
