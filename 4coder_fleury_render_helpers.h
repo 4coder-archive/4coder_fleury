@@ -7,6 +7,7 @@ enum F4_RangeHighlightKind
 {
     F4_RangeHighlightKind_Whole,
     F4_RangeHighlightKind_Underline,
+    F4_RangeHighlightKind_MinorUnderline,
 };
 
 struct F4_Flash

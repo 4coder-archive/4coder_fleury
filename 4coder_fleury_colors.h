@@ -22,6 +22,7 @@ CUSTOM_ID(colors, fleury_color_cursor_power_mode);
 CUSTOM_ID(colors, fleury_color_cursor_inactive);
 CUSTOM_ID(colors, fleury_color_plot_cycle);
 CUSTOM_ID(colors, fleury_color_token_highlight);
+CUSTOM_ID(colors, fleury_color_token_minor_highlight);
 CUSTOM_ID(colors, fleury_color_comment_user_name);
 CUSTOM_ID(colors, fleury_color_lego_grab);
 CUSTOM_ID(colors, fleury_color_lego_splat);
