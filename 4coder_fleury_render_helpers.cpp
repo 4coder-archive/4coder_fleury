@@ -28,8 +28,6 @@ F4_RenderRangeHighlight(Application_Links *app, View_ID view_id, Text_Layout_ID 
     total_range_rect.x1 = MaximumF32(range_start_rect.x1, range_end_rect.x1);
     total_range_rect.y1 = MaximumF32(range_start_rect.y1, range_end_rect.y1);
     
-    ARGB_Color color = fcolor_resolve(fcolor_id(fleury_color_token_highlight));
-    
     switch (kind) {
         case F4_RangeHighlightKind_Underline: {
             total_range_rect.y0 = total_range_rect.y1 - 1.f;
@@ -39,7 +37,6 @@ F4_RenderRangeHighlight(Application_Links *app, View_ID view_id, Text_Layout_ID 
         case F4_RangeHighlightKind_MinorUnderline: {
             total_range_rect.y0 = total_range_rect.y1 - 1.f;
             total_range_rect.y1 += 1.f;
-            color = fcolor_resolve(fcolor_id(fleury_color_token_minor_highlight));
         }
     }
     draw_rectangle(app, total_range_rect, 4.f, color);

@@ -140,14 +140,16 @@ F4_RenderBuffer(Application_Links *app, View_ID view_id, Face_ID face_id,
                     if (range_contains(token_range, view_get_cursor_pos(app, view_id)))
                     {
                         F4_RenderRangeHighlight(app, view_id, text_layout_id,
-                                                token_range, F4_RangeHighlightKind_Underline);
+                                                token_range, F4_RangeHighlightKind_Underline,
+                                                fcolor_resolve(fcolor_id(fleury_color_token_highlight)));
                     }
                     // NOTE(jack): If the token matches the active buffer token. highlight it with a Minor Underline
                     else if(active_cursor_token->kind == TokenBaseKind_Identifier && 
                             string_match(token_string, active_cursor_string))
                     {
                         F4_RenderRangeHighlight(app, view_id, text_layout_id,
-                                                token_range, F4_RangeHighlightKind_MinorUnderline);
+                                                token_range, F4_RangeHighlightKind_MinorUnderline,
+                                                fcolor_resolve(fcolor_id(fleury_color_token_minor_highlight)));
                         
                     } 
                 }
