@@ -362,7 +362,7 @@
 // [ ] Plots and Calc are so coupled and I hate it, please rewrite or something
 
 //~ TODO META
-// [ ] Project-wide todo list (by searching for TODO and DONE comments, lister for toggling)
+// [X] Project-wide todo list (by searching for TODO and DONE comments, lister for toggling)
 // [ ] Project switcher
 // [ ] Plan + do modal input scheme... Identifier-mode, text-mode, semantics mode, search mode...?
 
