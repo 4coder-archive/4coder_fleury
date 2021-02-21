@@ -425,6 +425,32 @@ F4_Index_RequireTokenKind(F4_Index_ParseCtx *ctx, Token_Base_Kind kind, Token **
 }
 
 internal b32
+F4_Index_RequireTokenSubKind(F4_Index_ParseCtx *ctx, int sub_kind, Token **token_out, F4_Index_TokenSkipFlags flags)
+{
+    b32 result = 0;
+    Token *token = token_it_read(&ctx->it);
+    if(token)
+    {
+        if(token->sub_kind == sub_kind)
+        {
+            result = 1;
+            if(token_out)
+            {
+                *token_out = token;
+            }
+        }
+    }
+    else
+    {
+        ctx->done = 1;
+    }if(result)
+    {
+        F4_Index_ParseCtx_Inc(ctx, flags);
+    }
+    return result;
+}
+
+internal b32
 F4_Index_PeekToken(F4_Index_ParseCtx *ctx, String_Const_u8 string)
 {
     b32 result = 0;
@@ -527,12 +553,12 @@ F4_Index_ParseComment(F4_Index_ParseCtx *ctx, Token *token)
     {
         if(string.str[i] == '@')
         {
-            F4_Index_MakeNote(ctx->app, ctx->file, 0, string_substring(string, Ii64(i, string.size-1)), F4_Index_NoteKind_CommentTag, 0, Ii64(token));
+            F4_Index_MakeNote(ctx->app, ctx->file, 0, string_substring(string, Ii64(i, string.size)), F4_Index_NoteKind_CommentTag, 0, Ii64(token));
             break;
         }
         else if(i+4 < string.size && string_match(S8Lit("TODO"), string_substring(string, Ii64(i, i + 4))))
         {
-            F4_Index_MakeNote(ctx->app, ctx->file, 0, string_substring(string, Ii64(i, string.size-1)), F4_Index_NoteKind_CommentToDo, 0, Ii64(token));
+            F4_Index_MakeNote(ctx->app, ctx->file, 0, string_substring(string, Ii64(i, string.size)), F4_Index_NoteKind_CommentToDo, 0, Ii64(token));
         }
     }
 }
