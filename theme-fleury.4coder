@@ -51,6 +51,7 @@ fleury_color_index_function        = 0xFFde451f;
 fleury_color_index_macro           = 0xFF2895c7;
 fleury_color_index_constant        = 0xff6eb535;
 fleury_color_index_comment_tag     = 0xffffae00;
+fleury_color_index_decl            = 0xffc9598a;
 fleury_color_cursor_macro          = 0xffde2368;
 fleury_color_cursor_power_mode     = 0xffefaf2f;
 fleury_color_cursor_inactive       = 0xFF880000;
