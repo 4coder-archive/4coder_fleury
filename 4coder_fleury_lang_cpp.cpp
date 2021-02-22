@@ -305,6 +305,7 @@ internal F4_LANGUAGE_INDEXFILE(F4_CPP_IndexFile)
                                        TokenBaseKind_Identifier, &name,
                                        "(")))
         {
+            handled = 1;
             b32 prototype = 0;
             if(F4_CPP_ParseFunctionBodyIFuckingHateCPlusPlus(ctx, &prototype))
             {
@@ -328,6 +329,7 @@ internal F4_LANGUAGE_INDEXFILE(F4_CPP_IndexFile)
                                        TokenBaseKind_Identifier, &name,
                                        "(")))
         {
+            handled = 1;
             b32 prototype = 0;
             if(F4_CPP_ParseFunctionBodyIFuckingHateCPlusPlus(ctx, &prototype))
             {
@@ -355,6 +357,7 @@ internal F4_LANGUAGE_INDEXFILE(F4_CPP_IndexFile)
                                        TokenBaseKind_Identifier, &name,
                                        "=")))
         {
+            handled = 1;
             F4_Index_MakeNote(ctx->app, ctx->file, 0, F4_Index_StringFromToken(ctx, name), F4_Index_NoteKind_Decl, 0, Ii64(name));
         }
         
@@ -390,6 +393,7 @@ internal F4_LANGUAGE_INDEXFILE(F4_CPP_IndexFile)
             
             if(valid)
             {
+                handled = 1;
                 F4_Index_MakeNote(ctx->app, ctx->file, 0, F4_Index_StringFromToken(ctx, name),
                                   F4_Index_NoteKind_Function, prototype ? F4_Index_NoteFlag_ProductType : 0, Ii64(name));
                 F4_CPP_SkipParseBody(ctx);
