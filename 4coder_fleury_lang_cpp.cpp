@@ -1,22 +1,13 @@
 
 internal void
-F4_CPP_ParseMacroDefinition(F4_Index_ParseCtx *ctx, F4_Index_TokenSkipFlags flags)
+F4_CPP_ParseMacroDefinition(F4_Index_ParseCtx *ctx)
 {
     Token *name = 0;
-    if(F4_Index_RequireTokenKind(ctx, TokenBaseKind_Identifier, &name, flags))
+    if(F4_Index_ParsePattern(ctx, "%k", TokenBaseKind_Identifier, &name))
     {
         F4_Index_MakeNote(ctx->app, ctx->file, 0, F4_Index_StringFromToken(ctx, name),
                           F4_Index_NoteKind_Macro, 0, Ii64(name));
-    }
-    for(;!ctx->done;)
-    {
-        Token *token = token_it_read(&ctx->it);
-        if(!(token->flags & TokenBaseFlag_PreprocessorBody) ||
-           token->kind == TokenBaseKind_Preprocessor)
-        {
-            break;
-        }
-        F4_Index_ParseCtx_IncWs(ctx);
+        F4_Index_SkipSoftTokens(ctx, 1);
     }
 }
 
@@ -36,7 +27,7 @@ F4_CPP_SkipParseBody(F4_Index_ParseCtx *ctx)
         }
         else if(F4_Index_ParsePattern(ctx, "%b", TokenCppKind_PPDefine, &name))
         {
-            F4_CPP_ParseMacroDefinition(ctx, F4_Index_TokenSkipFlag_SkipWhitespace);
+            F4_CPP_ParseMacroDefinition(ctx);
         }
         else if(F4_Index_ParsePattern(ctx, "%t", "{"))
         {
@@ -389,12 +380,10 @@ internal F4_LANGUAGE_INDEXFILE(F4_CPP_IndexFile)
         }
         
         //~ NOTE(rjf): Macros
-        else if(F4_Index_ParsePattern(ctx, "%b%k", TokenCppKind_PPDefine, (Token **)0, TokenBaseKind_Identifier, &name))
+        else if(F4_Index_ParsePattern(ctx, "%b", TokenCppKind_PPDefine, &name))
         {
             handled = 1;
-            F4_Index_MakeNote(ctx->app, ctx->file, 0, F4_Index_StringFromToken(ctx, name),
-                              F4_Index_NoteKind_Macro, 0, Ii64(name));
-            F4_Index_SkipSoftTokens(ctx, 1);
+            F4_CPP_ParseMacroDefinition(ctx);
         }
         
         
