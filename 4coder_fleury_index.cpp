@@ -674,7 +674,17 @@ F4_Index_ParsePattern(F4_Index_ParseCtx *ctx, char *fmt, ...)
 					{
 						String8 token_string = F4_Index_StringFromToken(ctx, token);
 						F4_Index_Note *note = F4_Index_LookupNote(token_string, 0);
-						if (note && note->kind == kind)
+                        b32 kind_match = 0;
+                        for(F4_Index_Note *n = note; n; n = n->next)
+                        {
+                            if(n->kind == kind)
+                            {
+                                kind_match = 1;
+                                note = n;
+                                break;
+                            }
+                        }
+						if (note && kind_match)
 						{
 							*output_note = note;
 							parsed = 1;

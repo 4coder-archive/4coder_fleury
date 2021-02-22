@@ -142,6 +142,7 @@ internal F4_LANGUAGE_INDEXFILE(F4_CPP_IndexFile)
         
         Token *name = 0;
         Token *base_type = 0;
+        F4_Index_Note *containing_struct = 0;
         F4_Index_Note *note = 0;
         
         if(0){}
@@ -308,6 +309,29 @@ internal F4_LANGUAGE_INDEXFILE(F4_CPP_IndexFile)
             if(F4_CPP_ParseFunctionBodyIFuckingHateCPlusPlus(ctx, &prototype))
             {
                 F4_Index_MakeNote(ctx->app, ctx->file, 0, F4_Index_StringFromToken(ctx, name),
+                                  F4_Index_NoteKind_Function, prototype ? F4_Index_NoteFlag_ProductType : 0, Ii64(name));
+            }
+        }
+        
+        //~ NOTE(rjf): Member Functions
+        else if(scope_nest == 0 &&
+                (F4_Index_ParsePattern(ctx, "%k%o%n%t%k%t",
+                                       TokenBaseKind_Identifier, &base_type,
+                                       F4_Index_NoteKind_Type, &containing_struct,
+                                       "::",
+                                       TokenBaseKind_Identifier, &name,
+                                       "(") ||
+                 F4_Index_ParsePattern(ctx, "%k%o%n%t%k%t",
+                                       TokenBaseKind_Keyword, &base_type,
+                                       F4_Index_NoteKind_Type, &containing_struct,
+                                       "::",
+                                       TokenBaseKind_Identifier, &name,
+                                       "(")))
+        {
+            b32 prototype = 0;
+            if(F4_CPP_ParseFunctionBodyIFuckingHateCPlusPlus(ctx, &prototype))
+            {
+                F4_Index_MakeNote(ctx->app, ctx->file, containing_struct, F4_Index_StringFromToken(ctx, name),
                                   F4_Index_NoteKind_Function, prototype ? F4_Index_NoteFlag_ProductType : 0, Ii64(name));
             }
         }
