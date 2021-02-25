@@ -364,7 +364,7 @@ internal F4_LANGUAGE_INDEXFILE(F4_CPP_IndexFile)
             if(F4_CPP_ParseFunctionBodyIFuckingHateCPlusPlus(ctx, &prototype))
             {
                 F4_Index_MakeNote(ctx->app, ctx->file, 0, F4_Index_StringFromToken(ctx, name),
-                                  F4_Index_NoteKind_Function, prototype ? F4_Index_NoteFlag_ProductType : 0, Ii64(name));
+                                  F4_Index_NoteKind_Function, prototype ? F4_Index_NoteFlag_Prototype : 0, Ii64(name));
             }
         }
         
