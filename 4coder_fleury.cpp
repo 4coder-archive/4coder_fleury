@@ -553,11 +553,11 @@ CUSTOM_DOC("Fleury startup event")
         
         // NOTE(rjf): Open lego buffer.
         {
-            Buffer_ID comp_buffer = create_buffer(app, string_u8_litexpr("*lego*"),
+            Buffer_ID lego_buffer = create_buffer(app, string_u8_litexpr("*lego*"),
                                                   BufferCreate_NeverAttachToFile |
                                                   BufferCreate_AlwaysNew);
-            buffer_set_setting(app, comp_buffer, BufferSetting_Unimportant, true);
-            buffer_set_setting(app, comp_buffer, BufferSetting_ReadOnly, true);
+            buffer_set_setting(app, lego_buffer, BufferSetting_Unimportant, true);
+            buffer_set_setting(app, lego_buffer, BufferSetting_ReadOnly, true);
         }
         
         // NOTE(rjf): Open calc buffer.

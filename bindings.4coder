@@ -174,8 +174,8 @@ keys_file =
     { "view_jump_list_with_lister",  "Period", "Control", "Shift" },
     
     // NOTE(rjf): Code Peek
-    { "f4_code_peek",          "Alt", "Control" },
-    { "f4_code_peek_yank",     "Tab", "Control" },
+    { "f4_code_peek",          "Tick",  "Alt" },
+    { "f4_code_peek_yank",     "Tab",   "Control" },
     { "f4_code_peek_clear",    "Shift", "Alt" },
     
     // NOTE(rjf): Go To Def
