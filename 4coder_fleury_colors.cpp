@@ -206,38 +206,35 @@ F4_GetColor(Application_Links *app, ColorCtx ctx)
                 if(!F4_ARGBIsValid(color)) { color = default_color; }
                 break;
             }
-            
-            default:
-            {
-                switch(ctx.token.sub_kind)
-                {
-                    case TokenCppKind_LiteralTrue:
-                    case TokenCppKind_LiteralFalse:
-                    {
-                        color = F4_ARGBFromID(table, defcolor_bool_constant);
-                        FillFromFlag(F4_SyntaxFlag_Literals); 
-                        break;
-                    }
-                    case TokenCppKind_LiteralCharacter:
-                    case TokenCppKind_LiteralCharacterWide:
-                    case TokenCppKind_LiteralCharacterUTF8:
-                    case TokenCppKind_LiteralCharacterUTF16:
-                    case TokenCppKind_LiteralCharacterUTF32:
-                    {
-                        color = F4_ARGBFromID(table, defcolor_char_constant);
-                        FillFromFlag(F4_SyntaxFlag_Literals); 
-                        break;
-                    }
-                    case TokenCppKind_PPIncludeFile:
-                    {
-                        color = F4_ARGBFromID(table, defcolor_include);
-                        FillFromFlag(F4_SyntaxFlag_Literals); 
-                        break;
-                    }
-                }
-            }break;
-            
         }
+        
+        switch(ctx.token.sub_kind)
+        {
+            case TokenCppKind_LiteralTrue:
+            case TokenCppKind_LiteralFalse:
+            {
+                color = F4_ARGBFromID(table, defcolor_bool_constant);
+                FillFromFlag(F4_SyntaxFlag_Literals); 
+                break;
+            }
+            case TokenCppKind_LiteralCharacter:
+            case TokenCppKind_LiteralCharacterWide:
+            case TokenCppKind_LiteralCharacterUTF8:
+            case TokenCppKind_LiteralCharacterUTF16:
+            case TokenCppKind_LiteralCharacterUTF32:
+            {
+                color = F4_ARGBFromID(table, defcolor_char_constant);
+                FillFromFlag(F4_SyntaxFlag_Literals); 
+                break;
+            }
+            case TokenCppKind_PPIncludeFile:
+            {
+                color = F4_ARGBFromID(table, defcolor_include);
+                FillFromFlag(F4_SyntaxFlag_Literals); 
+                break;
+            }
+        }
+            
     }
     
     //~ NOTE(rjf): Cursor Color
