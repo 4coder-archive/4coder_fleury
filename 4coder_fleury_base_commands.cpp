@@ -1694,6 +1694,52 @@ CUSTOM_DOC("Counts the lines of code in the current buffer, breaks it down by se
     }
 }
 
+CUSTOM_COMMAND_SIG(f4_remedy_open_cursor)
+CUSTOM_DOC("Opens the active panel's file in an actively-running RemedyBG instance, and moves to the cursor's line position.")
+{
+    Scratch_Block scratch(app);
+    View_ID view = get_active_view(app, Access_Read);
+    Buffer_ID buffer = view_get_buffer(app, view, Access_Read);
+    String8 buffer_name = push_buffer_file_name(app, scratch, buffer);
+    i64 pos = view_get_cursor_pos(app, view);
+    i64 line = get_line_number_from_pos(app, buffer, pos);
+    String8 hot_directory = push_hot_directory(app, scratch);
+    Child_Process_ID child_id = create_child_process(app, hot_directory, push_stringf(scratch, "remedybg.exe open-file %.*s %i", string_expand(buffer_name), (int)line));
+    (void)child_id;
+}
+
+CUSTOM_COMMAND_SIG(f4_bump_to_column)
+CUSTOM_DOC("Insert the required number of spaces to get to a specified column number.")
+{
+    View_ID view = get_active_view(app, Access_Always);
+    Buffer_ID buffer = view_get_buffer(app, view, Access_Always);
+    Face_ID face_id = get_face_id(app, buffer);
+    Face_Description description = get_face_description(app, face_id);
+    
+    Query_Bar_Group group(app);
+    u8 string_space[256];
+    Query_Bar bar = {};
+    bar.prompt = string_u8_litexpr("Column Number: ");
+    bar.string = SCu8(string_space, (u64)0);
+    bar.string_capacity = sizeof(string_space);
+    if(query_user_number(app, &bar))
+    {
+        i64 column_number = (i64)string_to_integer(bar.string, 10);
+        i64 cursor = view_get_cursor_pos(app, view);
+        i64 cursor_line = get_line_number_from_pos(app, buffer, cursor);
+        i64 cursor_column = cursor - get_line_start_pos(app, buffer, cursor_line) + 1;
+        i64 spaces_to_insert = column_number - cursor_column;
+        History_Group group = history_group_begin(app, buffer);
+        for(i64 i = 0; i < spaces_to_insert; i += 1)
+        {
+            buffer_replace_range(app, buffer, Ii64(cursor, cursor), str8_lit(" "));
+        }
+        view_set_cursor(app, view, seek_pos(cursor+spaces_to_insert));
+        view_set_mark(app, view, seek_pos(cursor+spaces_to_insert));
+        history_group_end(group);
+    }
+}
+
 //~ NOTE(rjf): Deprecated names:
 CUSTOM_COMMAND_SIG(fleury_write_text_input)
 CUSTOM_DOC("Deprecated name. Please update to f4_write_text_input.")
