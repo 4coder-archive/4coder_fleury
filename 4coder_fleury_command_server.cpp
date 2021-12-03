@@ -482,7 +482,8 @@ int sts_net_check_socket_set(sts_net_set_t* set, const float timeout) {
     struct timeval  tv;
     int             i, max_fd, result;
     
-    
+    #pragma warning( push )
+    #pragma warning( disable : 4389 )
     FD_ZERO(&fds);
     for (i = 0, max_fd = 0; i < STS_NET_SET_SOCKETS; ++i) {
         if (set->sockets[i]) {
